@@ -1,0 +1,25 @@
+api_version: haibox/v1
+name: network-security
+description: Network discovery, DNS, packet capture, and service triage profile.
+image: haibox/network-security:0.1.0
+status: active
+network: isolated
+resources:
+  cpus: 2.0
+  memory: 4g
+  pids_limit: 512
+capabilities:
+  - NET_RAW
+  - NET_BIND_SERVICE
+environment: {}
+tools:
+  - nmap
+  - netcat
+  - tcpdump
+  - socat
+  - masscan
+  - netdiscover
+  - arping
+  - kdig
+  - whois
+  - curl

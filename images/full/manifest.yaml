@@ -1,0 +1,114 @@
+api_version: haibox/v1
+name: full
+version: 0.1.0
+status: experimental
+description: Combined Web Security, Network Security, Active Directory, and OSINT toolkit.
+base: haibox/web-security:0.1.0
+dockerfile: Dockerfile
+context: .
+platforms:
+  - linux/amd64
+depends_on:
+  - core
+  - network-security
+  - web-security
+  - ad-security
+  - osint
+build_args:
+  BASE_IMAGE: haibox/web-security:0.1.0
+  IMPACKET_VERSION: "0.13.1"
+  DNSRECON_VERSION: "0.10.1"
+tools:
+  - name: ffuf
+    version: v2.3.0
+    verify: ffuf -V
+  - name: gobuster
+    version: v3.8.2
+    verify: gobuster --version
+  - name: nuclei
+    version: v3.11.1
+    verify: nuclei -version
+  - name: httpx
+    version: v1.12.0
+    verify: httpx -version
+  - name: subfinder
+    version: v2.17.0
+    verify: subfinder -version
+  - name: katana
+    version: v1.8.0
+    verify: katana -version
+  - name: dalfox
+    version: v2.13.0
+    verify: dalfox --help
+  - name: arjun
+    version: 2.2.7
+    verify: arjun --help
+  - name: dirsearch
+    version: 0.5.0
+    verify: dirsearch --help
+  - name: sqlmap
+    version: 1.10.11
+    verify: sqlmap --version
+  - name: nikto
+    version: debian-trixie-20261108
+    verify: nikto -Version
+  - name: whatweb
+    version: debian-trixie-20261108
+    verify: whatweb --version
+  - name: dirb
+    version: debian-trixie-20261108
+    verify: test -x /usr/bin/dirb
+  - name: nmap
+    version: debian-trixie-20261108
+    verify: nmap --version
+  - name: tcpdump
+    version: debian-trixie-20261108
+    verify: tcpdump --version
+  - name: netcat
+    version: debian-trixie-20261108
+    verify: command -v nc
+  - name: socat
+    version: debian-trixie-20261108
+    verify: socat -V
+  - name: hping3
+    version: debian-trixie-20261108
+    verify: command -v hping3
+  - name: masscan
+    version: debian-trixie-20261108
+    verify: command -v masscan
+  - name: netdiscover
+    version: debian-trixie-20261108
+    verify: command -v netdiscover
+  - name: arping
+    version: debian-trixie-20261108
+    verify: command -v arping
+  - name: ping
+    version: debian-trixie-20261108
+    verify: ping -V
+  - name: traceroute
+    version: debian-trixie-20261108
+    verify: command -v traceroute
+  - name: whois
+    version: debian-trixie-20261108
+    verify: command -v whois
+  - name: kdig
+    version: debian-trixie-20261108
+    verify: command -v kdig
+  - name: impacket
+    version: 0.13.1
+    verify: command -v impacket-GetNPUsers || command -v GetNPUsers.py
+  - name: smbclient
+    version: debian-trixie-20261108
+    verify: smbclient --version
+  - name: ldapsearch
+    version: debian-trixie-20261108
+    verify: ldapsearch -VV
+  - name: kinit
+    version: debian-trixie-20261108
+    verify: command -v kinit
+  - name: dnsrecon
+    version: 0.10.1
+    verify: dnsrecon --help
+  - name: exiftool
+    version: debian-trixie-20261108
+    verify: exiftool -ver

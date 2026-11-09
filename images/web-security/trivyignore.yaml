@@ -1,0 +1,24 @@
+# Trivy suppressions for the Web Security image.
+#
+# The pinned nuclei-templates commit ships detection fixtures that look like
+# credentials to Trivy's secret scanner: RSA test keys, default Symfony
+# secrets, and a GCP service-account regex. They are upstream test data, not
+# live credentials. Every suppression is scoped to the exact fixture path so a
+# real secret elsewhere in the image still fails the scan.
+secrets:
+  - id: private-key
+    paths:
+      - "/opt/nuclei-templates/helpers/payloads/cve-2023-34039-keys/*"
+    statement: >-
+      CVE-2023-34039 detection payloads shipped by nuclei-templates; test keys,
+      not credentials.
+  - id: gcp-service-account
+    paths:
+      - "/opt/nuclei-templates/http/global-matchers/secrets-patterns-rules.yaml"
+    statement: >-
+      Regex used by nuclei to detect GCP service-account keys; not a credential.
+  - id: symfony-default-secret
+    paths:
+      - "/opt/nuclei-templates/http/misconfiguration/symfony/symfony-default-key-rce.yaml"
+    statement: >-
+      Default Symfony secrets used as detection payloads; not live credentials.

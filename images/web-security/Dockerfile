@@ -1,0 +1,146 @@
+# Independent HAIBOX Web Security image.
+#
+# Build from the repository root:
+#   uv run haibox image build web-security
+#
+# The base image and every tool version are pinned. Debian packages come from a
+# snapshot so a rebuild does not silently pick up a different package set.
+
+ARG DEBIAN_IMAGE=debian:13-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
+ARG DEBIAN_SNAPSHOT=20261108T000000Z
+
+FROM golang:1.26-bookworm@sha256:23ce71337b726608afb1bc00986e630a05034a87a87ea1fc2cd1ae5cf33387eb AS gobuilder
+
+ARG FFUF_VERSION=v2.3.0
+ARG GOBUSTER_VERSION=v3.8.2
+ARG NUCLEI_VERSION=v3.11.1
+ARG HTTPX_VERSION=v1.12.0
+ARG SUBFINDER_VERSION=v2.17.0
+ARG KATANA_VERSION=v1.8.0
+ARG DALFOX_VERSION=v2.13.0
+
+ENV CGO_ENABLED=0 \
+    GOTOOLCHAIN=local \
+    GOMAXPROCS=2 \
+    GOFLAGS="-trimpath -buildvcs=false -p=2"
+
+RUN set -eux; \
+    go install "github.com/ffuf/ffuf/v2@${FFUF_VERSION}"; \
+    go install "github.com/OJ/gobuster/v3@${GOBUSTER_VERSION}"; \
+    go install "github.com/projectdiscovery/nuclei/v3/cmd/nuclei@${NUCLEI_VERSION}"; \
+    go install "github.com/projectdiscovery/httpx/cmd/httpx@${HTTPX_VERSION}"; \
+    go install "github.com/projectdiscovery/subfinder/v2/cmd/subfinder@${SUBFINDER_VERSION}"; \
+    go install "github.com/projectdiscovery/katana/cmd/katana@${KATANA_VERSION}"; \
+    go install "github.com/hahwul/dalfox/v2@${DALFOX_VERSION}"
+
+FROM ${DEBIAN_IMAGE}
+
+ARG DEBIAN_SNAPSHOT
+ARG ARJUN_VERSION=2.2.7
+ARG DIRSEARCH_VERSION=0.5.0
+ARG SQLMAP_VERSION=1.10.11
+ARG NUCLEI_TEMPLATES_COMMIT=79fb682760ab3d5b0e22afbb44709353cbebf023
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    PATH=/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin \
+    PIPX_HOME=/opt/pipx \
+    PIPX_BIN_DIR=/usr/local/bin \
+    NUCLEI_TEMPLATES=/opt/nuclei-templates
+
+# The slim base has no CA bundle yet, so the snapshot is fetched over HTTP.
+# apt still verifies the signed InRelease metadata before installing anything.
+# Use Debian's official Cloudflare snapshot mirror: snapshot.debian.org
+# intermittently returns 504 Gateway Timeout for package indices, which made
+# builds hang for tens of minutes. The mirror serves the same pinned timestamp.
+# Debian classifies nikto as non-free; that component is enabled only on the
+# main snapshot line. Review its license before redistributing this image.
+RUN set -eux; \
+    rm -f /etc/apt/sources.list /etc/apt/sources.list.d/*; \
+    printf '%s\n' \
+        "deb [check-valid-until=no] http://snapshot-cloudflare.debian.org/archive/debian/${DEBIAN_SNAPSHOT}/ trixie main non-free" \
+        "deb [check-valid-until=no] http://snapshot-cloudflare.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}/ trixie-security main" \
+        > /etc/apt/sources.list; \
+    apt-get -o Acquire::Retries=5 update; \
+    apt-get -o Acquire::Retries=5 upgrade -y --no-install-recommends \
+        -o Dpkg::Options::=--force-confold; \
+    apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+        bash \
+        ca-certificates \
+        curl \
+        file \
+        git \
+        iproute2 \
+        jq \
+        less \
+        netcat-openbsd \
+        openssl \
+        procps \
+        python3 \
+        ripgrep \
+        tar \
+        tree \
+        unzip \
+        xz-utils; \
+    rm -rf /var/lib/apt/lists/*
+
+# Network tooling is a separate layer. Installing it together with the base
+# packages made apt balloon past 6 GB RSS inside BuildKit and triggered a host
+# OOM. The same set installs well under 2 GB when split; see
+# docs/image-validation.md.
+#
+# BIND's dnsutils and wget are intentionally absent. bind9-libs pulls
+# liblmdb0 and libxml2, whose HIGH/CRITICAL findings have no fixed Debian
+# version; wget is redundant with curl. Both removals are recorded in
+# docs/image-validation.md.
+RUN set -eux; \
+    apt-get -o Acquire::Retries=5 update; \
+    apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+        dirb \
+        nikto \
+        nmap \
+        pipx \
+        whatweb; \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=gobuilder /go/bin/ /usr/local/bin/
+
+RUN set -eux; \
+    PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx install --pip-args='--no-cache-dir' "arjun==${ARJUN_VERSION}"; \
+    PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx install --pip-args='--no-cache-dir' "dirsearch==${DIRSEARCH_VERSION}"; \
+    PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx install --pip-args='--no-cache-dir' "sqlmap==${SQLMAP_VERSION}"; \
+    /opt/pipx/venvs/dirsearch/bin/python -m pip install --no-cache-dir --quiet \
+        "cryptography==50.0.0" "pyopenssl==26.4.0"; \
+    apt-get purge -y pipx python3-venv; \
+    apt-get autoremove --purge -y; \
+    rm -rf /opt/pipx/shared /opt/pipx/logs; \
+    arjun --help >/dev/null; \
+    dirsearch --help >/dev/null; \
+    sqlmap --version >/dev/null; \
+    rm -rf /root/.cache /tmp/*
+
+RUN set -eux; \
+    git init /opt/nuclei-templates; \
+    cd /opt/nuclei-templates; \
+    git remote add origin https://github.com/projectdiscovery/nuclei-templates.git; \
+    git fetch --depth 1 origin "${NUCLEI_TEMPLATES_COMMIT}"; \
+    git checkout --detach FETCH_HEAD; \
+    rm -rf .git
+
+RUN set -eux; \
+    groupadd --gid 1000 haibox; \
+    useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash haibox; \
+    install -d -o haibox -g haibox /workspace /opt/haibox
+
+LABEL org.opencontainers.image.title="HAIBOX Web Security" \
+      org.opencontainers.image.description="Independent web security toolkit for the HAIBOX platform" \
+      org.opencontainers.image.version="0.1.0" \
+      org.opencontainers.image.licenses="MIT" \
+      haibox.image.name="web-security" \
+      haibox.image.version="0.1.0"
+
+USER haibox
+WORKDIR /workspace
+ENTRYPOINT ["/bin/bash"]
+CMD ["-l"]

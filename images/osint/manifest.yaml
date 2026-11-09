@@ -1,0 +1,34 @@
+api_version: haibox/v1
+name: osint
+version: 0.1.0
+status: experimental
+description: Public-source, DNS, and metadata image built on the Web Security toolset.
+base: haibox/web-security:0.1.0
+dockerfile: Dockerfile
+context: .
+platforms:
+  - linux/amd64
+depends_on:
+  - web-security
+build_args:
+  BASE_IMAGE: haibox/web-security:0.1.0
+  DNSRECON_VERSION: "0.10.1"
+tools:
+  - name: dnsrecon
+    version: 0.10.1
+    verify: dnsrecon --help
+  - name: exiftool
+    version: debian-trixie-20261108
+    verify: exiftool -ver
+  - name: whois
+    version: debian-trixie-20261108
+    verify: command -v whois
+  - name: subfinder
+    version: v2.17.0
+    verify: subfinder -version
+  - name: httpx
+    version: v1.12.0
+    verify: httpx -version
+  - name: nuclei
+    version: v3.11.1
+    verify: nuclei -version

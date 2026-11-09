@@ -1,0 +1,33 @@
+api_version: haibox/v1
+name: full
+description: Combined Web Security, Network Security, Active Directory, and OSINT profile.
+image: haibox/full:0.1.0
+status: experimental
+network: isolated
+resources:
+  cpus: 4.0
+  memory: 8g
+  pids_limit: 1024
+capabilities:
+  - NET_RAW
+  - NET_BIND_SERVICE
+environment: {}
+tools:
+  - ffuf
+  - nuclei
+  - httpx
+  - subfinder
+  - katana
+  - dalfox
+  - sqlmap
+  - nmap
+  - tcpdump
+  - socat
+  - masscan
+  - netdiscover
+  - impacket
+  - smbclient
+  - ldapsearch
+  - dnsrecon
+  - exiftool
+  - whois

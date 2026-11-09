@@ -1,0 +1,67 @@
+api_version: haibox/v1
+name: core
+version: 0.1.0
+status: active
+description: Minimal shell, file, and network triage image shared by the other HAIBOX variants.
+base: debian:13-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
+dockerfile: Dockerfile
+context: .
+platforms:
+  - linux/amd64
+build_args:
+  DEBIAN_SNAPSHOT: "20261108T000000Z"
+tools:
+  - name: bash
+    version: debian-trixie-20261108
+    verify: bash --version
+  - name: curl
+    version: debian-trixie-20261108
+    verify: curl --version
+  - name: file
+    version: debian-trixie-20261108
+    verify: file --version
+  - name: git
+    version: debian-trixie-20261108
+    verify: git --version
+  - name: iproute2
+    version: debian-trixie-20261108
+    verify: ip -V
+  - name: jq
+    version: debian-trixie-20261108
+    verify: jq --version
+  - name: less
+    version: debian-trixie-20261108
+    verify: less --version
+  - name: netcat
+    version: debian-trixie-20261108
+    verify: command -v nc
+  - name: nmap
+    version: debian-trixie-20261108
+    verify: nmap --version
+  - name: openssl
+    version: debian-trixie-20261108
+    verify: openssl version
+  - name: ping
+    version: debian-trixie-20261108
+    verify: ping -V
+  - name: procps
+    version: debian-trixie-20261108
+    verify: ps --version
+  - name: python3
+    version: debian-trixie-20261108
+    verify: python3 --version
+  - name: ripgrep
+    version: debian-trixie-20261108
+    verify: rg --version
+  - name: tar
+    version: debian-trixie-20261108
+    verify: tar --version
+  - name: tree
+    version: debian-trixie-20261108
+    verify: tree --version
+  - name: unzip
+    version: debian-trixie-20261108
+    verify: unzip -v
+  - name: xz
+    version: debian-trixie-20261108
+    verify: xz --version

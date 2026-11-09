@@ -1,0 +1,31 @@
+api_version: haibox/v1
+name: ad-security
+version: 0.1.0
+status: experimental
+description: Kerberos, LDAP, SMB, and Impacket toolkit for authorized Active Directory assessments.
+base: haibox/core:0.1.0
+dockerfile: Dockerfile
+context: .
+platforms:
+  - linux/amd64
+depends_on:
+  - core
+build_args:
+  BASE_IMAGE: haibox/core:0.1.0
+  IMPACKET_VERSION: "0.13.1"
+tools:
+  - name: impacket
+    version: 0.13.1
+    verify: command -v impacket-GetNPUsers || command -v GetNPUsers.py
+  - name: smbclient
+    version: debian-trixie-20261108
+    verify: smbclient --version
+  - name: ldapsearch
+    version: debian-trixie-20261108
+    verify: ldapsearch -VV
+  - name: kinit
+    version: debian-trixie-20261108
+    verify: command -v kinit
+  - name: nmap
+    version: debian-trixie-20261108
+    verify: nmap --version

@@ -1,0 +1,18 @@
+api_version: haibox/v1
+name: ad-security
+description: Authorized Active Directory assessment profile with Kerberos, LDAP, SMB, and Impacket tooling.
+image: haibox/ad-security:0.1.0
+status: experimental
+network: isolated
+resources:
+  cpus: 2.0
+  memory: 4g
+  pids_limit: 512
+capabilities: []
+environment: {}
+tools:
+  - impacket
+  - smbclient
+  - ldapsearch
+  - kinit
+  - nmap

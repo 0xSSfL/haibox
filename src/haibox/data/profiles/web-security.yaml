@@ -1,0 +1,28 @@
+api_version: haibox/v1
+name: web-security
+description: Web application testing profile for HTTP, content discovery, and template scanning.
+image: haibox/web-security:0.1.0
+status: active
+network: isolated
+resources:
+  cpus: 2.0
+  memory: 4g
+  pids_limit: 512
+capabilities:
+  - NET_RAW
+environment: {}
+tools:
+  - ffuf
+  - gobuster
+  - nuclei
+  - httpx
+  - subfinder
+  - katana
+  - dalfox
+  - arjun
+  - dirsearch
+  - sqlmap
+  - nikto
+  - whatweb
+  - dirb
+  - nmap

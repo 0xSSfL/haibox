@@ -1,0 +1,51 @@
+api_version: haibox/v1
+name: network-security
+version: 0.1.0
+status: active
+description: Network discovery, DNS, packet capture, and service triage image built on Core.
+base: haibox/core:0.1.0
+dockerfile: Dockerfile
+context: .
+platforms:
+  - linux/amd64
+depends_on:
+  - core
+build_args:
+  BASE_IMAGE: haibox/core:0.1.0
+tools:
+  - name: nmap
+    version: debian-trixie-20261108
+    verify: nmap --version
+  - name: tcpdump
+    version: debian-trixie-20261108
+    verify: tcpdump --version
+  - name: netcat
+    version: debian-trixie-20261108
+    verify: command -v nc
+  - name: socat
+    version: debian-trixie-20261108
+    verify: socat -V
+  - name: hping3
+    version: debian-trixie-20261108
+    verify: command -v hping3
+  - name: masscan
+    version: debian-trixie-20261108
+    verify: command -v masscan
+  - name: netdiscover
+    version: debian-trixie-20261108
+    verify: command -v netdiscover
+  - name: arping
+    version: debian-trixie-20261108
+    verify: command -v arping
+  - name: ping
+    version: debian-trixie-20261108
+    verify: ping -V
+  - name: traceroute
+    version: debian-trixie-20261108
+    verify: command -v traceroute
+  - name: whois
+    version: debian-trixie-20261108
+    verify: command -v whois
+  - name: kdig
+    version: debian-trixie-20261108
+    verify: command -v kdig

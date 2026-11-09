@@ -1,0 +1,17 @@
+api_version: haibox/v1
+name: core
+description: Minimal shell, file, and network triage profile.
+image: haibox/core:0.1.0
+status: active
+network: isolated
+resources:
+  cpus: 2.0
+  memory: 2g
+  pids_limit: 256
+capabilities: []
+environment: {}
+tools:
+  - bash
+  - curl
+  - jq
+  - nmap
