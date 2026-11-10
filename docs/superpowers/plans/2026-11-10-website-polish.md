@@ -31,7 +31,7 @@
 - Every homepage icon symbol resolves to a local SVG and the Markdown contains no literal Jinja include; `test_homepage_icons_use_local_svg_sprite` checks the icon IDs and source.
 - Navigation keeps all current pages available and current URLs stable; `uv run mkdocs build --strict` checks configured pages and internal references, followed by an output link inventory.
 - Grid tracks, badges, and long Quick Start commands fit smaller viewports; inspect rendered screenshots at desktop, tablet, and mobile sizes when browser access is available.
-- Alpha claims and motion accessibility remain accurate; Task 5 adds `test_homepage_preserves_security_disclosures_and_reduced_motion` before changing copy or controls, then checks warning text, illustrative demo label, and the reduced-motion stylesheet rule.
+- Alpha claims and motion accessibility remain accurate; Task 4 adds `test_homepage_preserves_security_disclosures_and_reduced_motion` before changing copy or controls, then checks warning text, illustrative demo label, and the reduced-motion stylesheet rule.
 
 ---
 
@@ -48,11 +48,13 @@ git add docs/superpowers/specs/2026-11-10-website-polish-design.md docs/superpow
 git commit -m "docs: plan HAIBOX website polish"
 ```
 
-### Task 2: Add homepage accuracy and rendering regression tests
+### Task 2: Fix homepage icons and manifest-backed toolkit cards with regression tests
 
 **Files:**
 - Create: `tests/unit/test_docs_site.py`
-- Read: `docs/index.md`, `images/*/manifest.yaml`
+- Create: `docs/assets/icons.svg`
+- Modify: `docs/index.md`
+- Read: `images/*/manifest.yaml`
 
 **Interfaces:**
 - Tests treat each homepage toolkit card as an `<article class="toolkit-card" data-image="<manifest-name>">`.
@@ -79,51 +81,39 @@ Run: `uv run pytest tests/unit/test_docs_site.py -q`
 
 Expected: FAIL because the current page contains raw Jinja, mismatched tool tags, and lacks the new SVG sprite contract.
 
-- [ ] **Step 5: Commit the regression tests**
+- [ ] **Step 5: Commit the regression tests while they are red**
 
 ```bash
 git add tests/unit/test_docs_site.py
 git commit -m "test: cover HAIBOX website content accuracy"
 ```
 
-### Task 3: Fix homepage icons and manifest-backed toolkit cards
-
-**Files:**
-- Create: `docs/assets/icons.svg`
-- Modify: `docs/index.md`
-- Test: `tests/unit/test_docs_site.py`
-
-**Interfaces:**
-- The SVG sprite defines a unique symbol for each feature, toolkit, Quick Start, warning, and documentation CTA icon.
-- Toolkit card `data-image` values match the directory names under `images/`.
-- Core, Network Security, AD Security, OSINT, and Full tags are drawn from their manifest/base tool sets; unsupported names are removed or replaced.
-
-- [ ] **Step 1: Add the local SVG symbol sprite**
+- [ ] **Step 6: Add the local SVG symbol sprite**
 
 Define the required icons with `currentColor` fills, consistent `viewBox` dimensions, and no animation or external references.
 
-- [ ] **Step 2: Replace Jinja snippets with accessible SVG references**
+- [ ] **Step 7: Replace Jinja snippets with accessible SVG references**
 
 Use decorative SVGs (`aria-hidden="true"`, `focusable="false"`) and local `use` references; remove all `{% include %}` expressions from the Markdown page.
 
-- [ ] **Step 3: Add semantic manifest identifiers and correct card content**
+- [ ] **Step 8: Add semantic manifest identifiers and correct card content**
 
 Remove Core `socat`; replace Network Security `tshark` and `bind9-dnsutils` with manifest tools; replace unsupported AD tools with `smbclient`, `ldapsearch`, `kinit`, and `nmap`; replace unsupported OSINT tools with `dnsrecon`, `exiftool`, `whois`, `subfinder`, and `httpx`; correct Full's selected tags. Preserve manifest status labels.
 
-- [ ] **Step 4: Run the regression tests and confirm they pass**
+- [ ] **Step 9: Run the regression tests and confirm they pass**
 
 Run: `uv run pytest tests/unit/test_docs_site.py -q`
 
 Expected: PASS for six cards, all displayed tools and statuses, and every local icon symbol.
 
-- [ ] **Step 5: Commit the icon and toolkit correction**
+- [ ] **Step 10: Commit the icon and toolkit correction**
 
 ```bash
 git add docs/index.md docs/assets/icons.svg
 git commit -m "fix: render homepage icons and correct toolkit details"
 ```
 
-### Task 4: Group navigation and add the branded footer
+### Task 3: Group navigation and add the branded footer
 
 **Files:**
 - Create: `overrides/partials/footer.html`
@@ -170,7 +160,7 @@ git add mkdocs.yml overrides/partials/footer.html docs/stylesheets/extra.css tes
 git commit -m "docs: group navigation and brand the site footer"
 ```
 
-### Task 5: Refine Quick Start and responsive layouts
+### Task 4: Refine Quick Start and responsive layouts
 
 **Files:**
 - Modify: `docs/index.md`
@@ -225,7 +215,7 @@ git rm docs/javascripts/landing-animation.js
 git commit -m "fix: improve HAIBOX quick start responsiveness"
 ```
 
-### Task 6: Verify the complete site and prepare the pull request
+### Task 5: Verify the complete site and prepare the pull request
 
 **Files:**
 - Verify: all files changed in Tasks 1–4
