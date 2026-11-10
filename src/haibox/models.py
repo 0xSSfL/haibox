@@ -122,7 +122,7 @@ class RuntimeSettings(StrictModel):
     pids_limit: int
     uid: int
     gid: int
-    network_mode: Literal["isolated", "none"] = "isolated"
+    network_mode: Literal["isolated", "none", "scoped"] = "isolated"
     capabilities: list[str] = Field(default_factory=list)
     environment: dict[str, str] = Field(default_factory=dict)
 
@@ -169,8 +169,8 @@ class RuntimeSettings(StrictModel):
     def _network_consistency(self) -> RuntimeSettings:
         if self.network_mode == "none" and self.network_name != "none":
             raise ValueError("network_mode 'none' requires network_name 'none'")
-        if self.network_mode == "isolated" and self.network_name == "none":
-            raise ValueError("network_mode 'isolated' requires a haibox network")
+        if self.network_mode in ("isolated", "scoped") and self.network_name == "none":
+            raise ValueError(f"network_mode '{self.network_mode}' requires a haibox network")
         return self
 
 
@@ -274,7 +274,8 @@ class Profile(StrictModel):
     description: str = ""
     image: str
     status: Literal["active", "experimental", "planned"] = "active"
-    network: Literal["isolated", "none"] = "isolated"
+    network: Literal["isolated", "none", "scoped"] = "isolated"
+    gateway_required: bool = False
     resources: ResourceLimits = Field(default_factory=ResourceLimits)
     capabilities: list[str] = Field(default_factory=list)
     environment: dict[str, str] = Field(default_factory=dict)
@@ -469,7 +470,7 @@ class AuditSettings(StrictModel):
     hash_chain: bool = True
 
 
-NetworkProfile = Literal["isolated"]
+NetworkProfile = Literal["isolated", "scoped"]
 
 
 class NetworkSettings(StrictModel):

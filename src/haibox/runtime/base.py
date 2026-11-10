@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
+    from haibox.models import Scope
     from haibox.runtime.spec import ContainerSpec
     from haibox.runtime.vpn_spec import VpnGatewaySpec
 
@@ -51,6 +52,12 @@ class NetworkInfo:
     gateway: str | None = None
 
     @property
+    def bridge_interface(self) -> str | None:
+        if self.driver == "bridge" and self.id:
+            return f"br-{self.id[:12]}"
+        return None
+
+    @property
     def managed(self) -> bool:
         return self.labels.get("haibox.managed") == "true"
 
@@ -87,6 +94,10 @@ class ContainerRuntime(Protocol):
     def network_exists(self, name: str) -> bool: ...
 
     def network_remove(self, name: str) -> None: ...
+
+    def apply_policy(self, scope: Scope, bridge: str, engagement_id: str) -> None: ...
+
+    def remove_policy(self, engagement_id: str) -> None: ...
 
     def create_container(self, spec: ContainerSpec) -> str: ...
 

@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from haibox.errors import ContainerError, RuntimeFailure
+from haibox.models import Scope
 from haibox.runtime.base import ContainerInfo, ExecResult, ImageInfo
 from haibox.runtime.process import ProcessResult
 from haibox.runtime.spec import ContainerSpec
@@ -32,6 +33,7 @@ class FakeRuntime:
     containers: dict[str, ContainerInfo] = field(default_factory=dict)
     networks: dict[str, str] = field(default_factory=dict)
     vpn_networks: dict[str, str] = field(default_factory=dict)
+    policies: dict[str, Scope] = field(default_factory=dict)
     missing_images: set[str] = field(default_factory=set)
     calls: list[tuple[str, tuple[Any, ...]]] = field(default_factory=list)
     exec_results: list[ExecResult] = field(default_factory=list)
@@ -73,6 +75,15 @@ class FakeRuntime:
         if self.vpn_networks.get(name) != vpn_name:
             raise ContainerError(f"VPN network not found or not owned: {name}")
         del self.vpn_networks[name]
+
+    # ------------------------------------------------------------------ policy
+    def apply_policy(self, scope: Scope, bridge: str, engagement_id: str) -> None:
+        self._record("apply_policy", scope, bridge, engagement_id)
+        self.policies[engagement_id] = scope
+
+    def remove_policy(self, engagement_id: str) -> None:
+        self._record("remove_policy", engagement_id)
+        self.policies.pop(engagement_id, None)
 
     # -------------------------------------------------------------- containers
     def create_container(self, spec: ContainerSpec) -> str:
