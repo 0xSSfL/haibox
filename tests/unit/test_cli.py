@@ -454,3 +454,12 @@ def test_unknown_engagement_is_an_error(
     result = invoke(cli_runner, paths, "engagement", "show", "missing", "--json")
     assert result.exit_code != 0
     assert result.exception is not None
+
+
+def test_ui_banner(capsys: pytest.CaptureFixture[str]) -> None:
+    from haibox.cli.ui import banner
+
+    banner()
+    captured = capsys.readouterr()
+    assert "isolation-first pentest platform" in captured.out
+

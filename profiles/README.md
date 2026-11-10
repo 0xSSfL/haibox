@@ -3,13 +3,13 @@
 The canonical built-in profiles live inside the Python package at:
 
 ```text
-src/redoubt/data/profiles/
+src/haibox/data/profiles/
 ```
 
 User profiles can override them in:
 
 ```text
-~/.config/redoubt/profiles/<name>.yaml
+~/.config/haibox/profiles/<name>.yaml
 ```
 
 The Web Security profile is the only profile with an image definition in the
