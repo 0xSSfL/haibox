@@ -208,21 +208,21 @@ def banner(subtitle: str = "isolation-first pentest platform") -> None:
     if _options.quiet:
         return
     get_console().print(
-        "[haibox.brand]██████╗ ███████╗██████╗  ██████╗ ██╗   ██╗██████╗ ████████╗[/haibox.brand]"
+        "[haibox.brand]██╗  ██╗ █████╗ ██╗██████╗  ██████╗ ██╗  ██╗[/haibox.brand]"
     )
     get_console().print(
-        "[haibox.brand]██╔══██╗██╔════╝██╔══██╗██╔═══██╗██║   ██║██╔══██╗╚══██╔══╝[/haibox.brand]"
+        "[haibox.brand]██║  ██║██╔══██╗██║██╔══██╗██╔═══██╗╚██╗██╔╝[/haibox.brand]"
     )
     get_console().print(
-        "[haibox.brand]██████╔╝█████╗  ██║  ██║██║   ██║██║   ██║██████╔╝   ██║   [/haibox.brand]"
+        "[haibox.brand]███████║███████║██║██████╔╝██║   ██║ ╚███╔╝ [/haibox.brand]"
     )
     get_console().print(
-        "[haibox.brand]██╔══██╗██╔══╝  ██║  ██║██║   ██║██║   ██║██╔══██╗   ██║   [/haibox.brand]"
+        "[haibox.brand]██╔══██║██╔══██║██║██╔══██╗██║   ██║ ██╔██╗ [/haibox.brand]"
     )
     get_console().print(
-        "[haibox.brand]██║  ██║███████╗██████╔╝╚██████╔╝╚██████╔╝██████╔╝   ██║   [/haibox.brand]"
+        "[haibox.brand]██║  ██║██║  ██║██║██████╔╝╚██████╔╝██╔╝ ██╗[/haibox.brand]"
     )
     get_console().print(
-        "[haibox.brand]╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝  ╚═════╝ ╚═════╝    ╚═╝   [/haibox.brand]"
+        "[haibox.brand]╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚═════╝  ╚═════╝ ╚═╝  ╚═╝[/haibox.brand]"
     )
     get_console().print(f"[haibox.muted]{subtitle}[/haibox.muted]\n")

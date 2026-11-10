@@ -1,8 +1,7 @@
 # AGENTS.md — HAIBOX
 
 HAIBOX is a Python 3.11+ Typer CLI plus a catalog of Docker pentest images.
-The package and import name is **`haibox`**. `profiles/README.md` still says
-`redoubt` (stale rename); trust `src/haibox/` over that file.
+The package and import name is **`haibox`**.
 
 ## Source of truth
 
