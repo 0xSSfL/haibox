@@ -11,6 +11,7 @@ claim. A procedure is not a result; verification rows live in the top-level
 | [architecture.md](architecture.md) | Components, data flow, invariants, trust boundaries, known gaps |
 | [threat-model.md](threat-model.md) | Assets, actors, threats, mitigations, verification checklist |
 | [image-catalog.md](image-catalog.md) | Image variants, tool sets, dependency graph, build order, and status |
+| [verification-status.md](verification-status.md) | Recorded verification history, test results, and capability status |
 | [image-validation.md](image-validation.md) | Build inputs, verification, integration, scan, and suppression results for the Web Security image |
 | [vulnerability-risk-register.md](vulnerability-risk-register.md) | Per-group analysis of remaining HIGH/CRITICAL findings and why they are not suppressed |
 | [roadmap.md](roadmap.md) | Milestones from source foundation to release |

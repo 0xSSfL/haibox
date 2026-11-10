@@ -29,7 +29,7 @@ Delivered:
 
 **Exit criteria:** met: the unit suite, lint, and type checks pass locally.
 
-## M1 — First runtime validation (current)
+## M1 — First runtime validation (complete)
 
 **Goal:** prove the source works against a real Docker endpoint.
 
@@ -50,8 +50,10 @@ Delivered:
 - [ ] make the Trivy HIGH/CRITICAL scan gate green (blocked on upstream Debian/Go dependency fixes);
 - [ ] optionally repeat on the KVM VM or dedicated server.
 
-**Exit criteria:** all commands pass; the image digest and scan report are
-recorded; the smoke test and checklist results are recorded in `README.md`.
+**Exit criteria:** met for runtime verification; image digest and scan reports
+are recorded in `README.md`, [`docs/image-validation.md`](image-validation.md),
+and [`docs/vulnerability-risk-register.md`](vulnerability-risk-register.md).
+Dependency remediation remains tracked as an ongoing gate blocker.
 
 Status on 2026-11-09: build, `image verify`, both integration tests, the network
 probe, the suppression-scope check, the CLI/TUI smoke tests, and the Trivy
@@ -84,25 +86,46 @@ and in Go modules embedded by the latest upstream releases (`golang.org/x/net`,
 [`vulnerability-risk-register.md`](vulnerability-risk-register.md) and are not
 suppressed.
 
-## M2 — Scope enforcement and trusted storage
+## M2 — Scope enforcement and trusted storage (current)
 
 **Goal:** turn the advisory scope into an enforced policy and separate the
 vault identity.
 
-Host-service isolation is now the default and the only network profile: the
-isolated gateway profile removes the host address from the engagement bridge,
-and ADR-0009 removed the legacy `internal` profile. M2 adds scope-aware
-control over the authorized lab-target path; ADR-0010 describes the planned
-separate `scoped` connectivity profile.
+Host-service isolation is now the default network profile: the isolated gateway
+profile removes the host address from the engagement bridge, and ADR-0009
+removed the legacy `internal` profile. M2 adds scope-aware control over the
+authorized lab-target path (ADR-0010 `scoped` connectivity profile) and
+hardens trusted storage.
 
-- implement a per-engagement nftables or equivalent policy for the engagement
-  bridge;
-- wire the scope file into the policy (address/port allowlist and exclusions);
-- default-deny out-of-scope traffic to lab targets, redirects, and DNS;
-- add negative tests for each bypass path;
-- create a separate `haibox-vault` identity for secrets and audit;
-- add an append-only off-VM audit/evidence sink;
-- add a workspace disk quota.
+- [x] implement a per-engagement nftables policy engine (`inet haibox-<id>`) with
+      stateful forward filtering, fail-closed drop policy, and clean teardown;
+- [x] wire the scope file into the policy (IPv4/IPv6 CIDR/address allowlist,
+      exclusions with strict precedence over allowlist, port-specific rules);
+- [x] default-deny out-of-scope traffic, cloud metadata (`169.254.169.254`),
+      loopback (`127.0.0.0/8`, `::1`), and link-local ranges;
+- [x] unit test ruleset compilation, dual-stack CIDRs, exclusion precedence, and
+      the `apply`/`remove` lifecycle with `CommandRunner`;
+- [ ] wire policy generation and enforcement into the runtime network creation
+      and cleanup paths;
+      *Partial (2026-11-10):* `DockerCli.create_container` applies the policy
+      for the `scoped` profile and `network_remove` deletes it. Still open:
+      the policy is re-applied per container (rules append instead of being
+      flushed), a missing bridge silently skips enforcement, cleanup errors are
+      suppressed, and there is no runtime test. The network is created from the
+      global `network.profile` setting, while the engagement records
+      `profile.network`; the two can disagree, so setting the global profile to
+      `scoped` also opens every engagement whose profile says `isolated`.
+- [ ] implement the `scoped` connectivity profile and policy gateway container
+      (ADR-0010);
+      *Partial (2026-11-10):* the `scoped` profile and a non-internal bridge
+      exist. There is no policy gateway container; runners still receive a host
+      gateway address and the nftables forward chain does not filter the host
+      input path (bridge gateway, host services) or Docker's embedded DNS.
+- [ ] add negative integration tests proving a runner cannot bypass scope even
+      when a tool ignores the scope file;
+- [ ] create a separate `haibox-vault` identity for secrets and audit (ADR-0002);
+- [ ] add an append-only off-VM audit/evidence sink;
+- [ ] add workspace disk quotas (XFS project quotas or Docker storage-opt).
 
 **Exit criteria:** the threat-model checklist passes with enforcement enabled;
 a runner cannot reach an out-of-scope address even when the tool ignores the
@@ -112,13 +135,17 @@ scope file.
 
 **Goal:** a comfortable, auditable manual workflow.
 
-- scope editing commands and validation;
-- engagement export/import and archive format;
-- report scaffolding;
-- evidence tagging and search;
-- container health checks and resource usage;
-- backup/restore runbook;
-- key rotation for the vault identity.
+- scope editing commands and validation (`haibox scope edit`, `validate`, `diff`);
+- engagement export/import and archive format (`haibox engagement export/import`);
+- report scaffolding and Markdown/PDF synthesis;
+- evidence tagging, checksum verification, and full-text search;
+- container health checks, uptime monitoring, and live resource metrics;
+- backup and restore runbooks for host-side state;
+- key rotation and migration for the vault identity.
+
+**Exit criteria:** complete engagement lifecycle can be executed, archived,
+restored, and verified on a clean workstation without manual database or file
+surgery.
 
 ## M4 — Restricted AI broker
 
@@ -141,24 +168,32 @@ is attributable in the audit log.
 
 - host-only VPN profile store and CLI (done, unit-tested);
 - separate gateway specification and lifecycle (done, unit-tested);
-- gateway image definition (not built);
+- gateway image definition (`haibox/vpn-gateway`);
 - WireGuard and OpenVPN adapters;
-- runner attachment to the gateway (not implemented);
+- runner attachment to the gateway;
 - kill switch on tunnel loss, DNS leak prevention, IPv6 handling;
 - provider registry (generic WireGuard/OpenVPN first; commercial providers
   only after their terms are reviewed);
 - tests for disconnect, reconnect, and route fallback.
 
+**Exit criteria:** tunnel drops immediately sever all runner egress; zero
+packets leak to the local LAN or host default route; DNS resolves exclusively
+through the tunnel.
+
 ## M6 — Packaging and release
 
 **Goal:** reproducible distribution.
 
-- signed image builds and SBOM attestations;
+- signed image builds and SBOM attestations (Cosign / in-toto);
 - lockfile committed and audited;
-- package build and install test;
-- versioning and changelog;
-- public name decision and branding;
-- security review before any public release.
+- standalone binary packaging (pex / PyInstaller / RPM) and install tests;
+- semantic versioning and automated changelog generation;
+- public name decision, logo, and branding finalization;
+- independent security review before any public release.
+
+**Exit criteria:** reproducible builds verified from clean source clone; signed
+artifacts verify against public key; end-to-end installation test passes on
+Fedora and Debian.
 
 ## M7 — Desktop / GUI (optional)
 
