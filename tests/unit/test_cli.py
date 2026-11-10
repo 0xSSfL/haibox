@@ -57,9 +57,11 @@ def _init_demo(
 
 
 def test_version(cli_runner: CliRunner, paths: Paths) -> None:
+    from haibox.version import __version__
+
     result = invoke(cli_runner, paths, "version")
     assert result.exit_code == 0
-    assert result.output.strip() == "0.1.0"
+    assert result.output.strip() == __version__
 
 
 def test_main_turns_expected_errors_into_a_clean_exit(

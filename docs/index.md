@@ -4,69 +4,65 @@ hide:
   - toc
 ---
 
-<div class="hero-container" markdown>
 
-<div class="hero-badges">
-  <span class="hero-pill"><span class="twemoji">{% include ".icons/material/tag.svg" %}</span> v0.1.0 Alpha</span>
-  <span class="hero-pill pill-cyan"><span class="twemoji">{% include ".icons/material/shield-lock.svg" %}</span> Isolated Gateway</span>
-  <span class="hero-pill"><span class="twemoji">{% include ".icons/material/account-lock.svg" %}</span> Non-root (UID 65534)</span>
-  <span class="hero-pill pill-purple"><span class="twemoji">{% include ".icons/material/docker.svg" %}</span> Docker 28+ Direct</span>
-  <span class="hero-pill"><span class="twemoji">{% include ".icons/material/scale-balance.svg" %}</span> MIT Licensed</span>
-</div>
-
-<h1 class="hero-title">Your Pentest Lab.<br>In a Box.</h1>
-
-<p class="hero-subtitle">
-  An isolation-first, manual-first penetration testing workstation.
-  Dedicated per-engagement workspaces, pinned tool manifests, and tamper-evident audit logs.
-</p>
-
-<div class="hero-actions">
-  <a href="user-guide.md" class="btn-primary">
-    <span class="twemoji">{% include ".icons/material/rocket-launch.svg" %}</span> Get Started
-  </a>
-  <a href="#toolkits" class="btn-secondary">
-    <span class="twemoji">{% include ".icons/material/view-grid.svg" %}</span> Explore Toolkits
-  </a>
-  <a href="https://github.com/0xSSfL/haibox" class="btn-secondary" target="_blank" rel="noopener">
-    <span class="twemoji">{% include ".icons/fontawesome/brands/github.svg" %}</span> View on GitHub
-  </a>
-</div>
-
-<div class="quick-install-box">
-  <div class="quick-install-code">
-    <span class="prompt">$</span>curl -fsSL https://0xssfl.github.io/haibox/install.sh | bash
-  </div>
-</div>
-
-</div>
-
-<!-- Terminal Mockup -->
-<div class="terminal-window">
-  <div class="terminal-header">
-    <div class="terminal-dots">
-      <span class="terminal-dot close"></span>
-      <span class="terminal-dot minimize"></span>
-      <span class="terminal-dot zoom"></span>
+<section class="hb-landing" aria-labelledby="hb-hero-title">
+  <div class="hb-hero-layout">
+    <div class="hb-hero-copy">
+      <div class="hb-eyebrow"><span class="hb-status-dot" aria-hidden="true"></span> HAIBOX / 0.1.0 alpha / Docker-native</div>
+      <h1 id="hb-hero-title" class="hb-hero-title">Your pentest lab.<span class="hb-highlight">In a box.</span></h1>
+      <p class="hb-hero-desc">
+        Six curated security toolkits. Separate engagement workspaces.
+        A practical, manual-first workstation for authorized security testing,
+        with isolated networking by default.
+      </p>
+      <div class="hb-hero-actions">
+        <a class="hb-btn hb-btn-primary" href="user-guide/">Get started <span aria-hidden="true">&#8594;</span></a>
+        <a class="hb-btn hb-btn-secondary" href="#toolkits">Explore toolkits</a>
+        <a class="hb-btn hb-btn-secondary" href="https://github.com/0xSSfL/haibox" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">&#8599;</span></a>
+      </div>
+      <div class="hb-feature-notes" aria-label="Project highlights">
+        <span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg> Docker on Linux</span>
+        <span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg> Persistent workspaces</span>
+        <span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg> 6 toolkits</span>
+      </div>
     </div>
-    <div class="terminal-title">haibox — engagement: demo (web-security)</div>
+
+    <div class="hb-hero-visual">
+      <div class="hb-visual-glow" aria-hidden="true"></div>
+      <div class="hb-cube-stage" aria-hidden="true">
+        <div class="hb-cube-orbit"></div>
+        <div class="hb-cube">
+          <div class="hb-cube-face hb-cube-front"><img src="assets/haibox-mark.png" alt="" loading="lazy"></div>
+          <div class="hb-cube-face hb-cube-back"></div>
+          <div class="hb-cube-face hb-cube-right"></div>
+          <div class="hb-cube-face hb-cube-left"></div>
+          <div class="hb-cube-face hb-cube-top"></div>
+          <div class="hb-cube-face hb-cube-bottom"></div>
+        </div>
+      </div>
+      <div class="hb-terminal" role="img" aria-label="Illustrative terminal preview showing the HAIBOX doctor, image build, engagement creation, and shell workflow. These are examples, not live results.">
+        <div class="hb-terminal-head">
+          <span class="hb-terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="hb-terminal-caption">haibox / local workstation</span>
+          <span class="hb-terminal-preview">DEMO</span>
+        </div>
+        <div class="hb-terminal-body" aria-hidden="true">
+          <div class="hb-terminal-line"><span class="hb-comment"># Illustrative workflow (not live output)</span></div>
+          <div class="hb-terminal-line"><span class="hb-prompt">$</span>haibox doctor</div>
+          <div class="hb-terminal-line"><span class="hb-output">&gt; review Docker context and host requirements</span></div>
+          <div class="hb-terminal-line"><span class="hb-prompt">$</span>haibox image build <span class="hb-cyan">web-security</span></div>
+          <div class="hb-terminal-line"><span class="hb-output">&gt; builds a pinned toolkit image locally</span></div>
+          <div class="hb-terminal-line"><span class="hb-prompt">$</span>haibox engagement init demo <span class="hb-cyan">--profile web-security --allow-empty-scope</span></div>
+          <div class="hb-terminal-line"><span class="hb-output">&gt; create an offline lab workspace</span></div>
+          <div class="hb-terminal-line"><span class="hb-prompt">$</span>haibox shell <span class="hb-terminal-caret" aria-hidden="true"></span></div>
+        </div>
+        <div class="hb-terminal-foot">Offline by default &middot; illustrative demo &middot; no commands executed</div>
+      </div>
+      <div class="hb-visual-controls"><button class="hb-motion-toggle" type="button" aria-pressed="false" hidden>Pause animation</button></div>
+    </div>
   </div>
-  <div class="terminal-body">
-    <div class="t-line"><span class="t-prompt">$</span> <span class="t-cmd">haibox engagement init demo</span> <span class="t-flag">--profile web-security --name "Web Assessment"</span></div>
-    <div class="t-line"><span class="t-success">[+] Engagement demo initialized at ~/.local/share/haibox/engagements/demo/</span></div>
-    <div class="t-line"><span class="t-info">[✓] Network bridge created &middot; isolated gateway mode active (internet: denied)</span></div>
-    <div class="t-line">&nbsp;</div>
-    <div class="t-line"><span class="t-prompt">$</span> <span class="t-cmd">haibox run -- nmap --version</span></div>
-    <div class="t-line">Nmap version 7.95 ( https://nmap.org ) &middot; Platform: x86_64-pc-linux-gnu</div>
-    <div class="t-line">&nbsp;</div>
-    <div class="t-line"><span class="t-prompt">$</span> <span class="t-cmd">haibox shell</span></div>
-    <div class="t-line"><span class="t-muted">haibox@runner:/workspace$</span> <span class="t-cmd">ffuf -version</span></div>
-    <div class="t-line">ffuf version: 2.3.0 &middot; runner uid: 65534 &middot; rootfs: read-only</div>
-    <div class="t-line"><span class="t-muted">haibox@runner:/workspace$</span> <span class="t-cmd">exit</span></div>
-    <div class="t-line">&nbsp;</div>
-    <div class="t-line"><span class="t-success">[✓] Session ended. Workspace preserved. Audit log entry sealed with SHA-256.</span></div>
-  </div>
-</div>
+  <div class="hb-landing-alpha"><span aria-hidden="true">&#9888;</span><span><strong>Alpha release.</strong> External target routing and VPN/AI integration are unfinished, and image dependency scans still contain HIGH/CRITICAL findings. <a href="verification-status/">View verification status</a>.</span></div>
+</section>
 
 ---
 

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import typer
 import yaml
+from rich import box
 from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
 
+from haibox.cli import ui
 from haibox.cli.context import get_context
 from haibox.errors import ImageError
 from haibox.images.builder import ImageBuilder
@@ -32,23 +34,28 @@ def image_list() -> None:
     if not manifests:
         console.print(f"No image definitions under {catalog.root}")
         return
-    table = Table(title="HAIBOX image definitions")
-    table.add_column("Name")
-    table.add_column("Version")
+    table = Table(box=box.ROUNDED, border_style="haibox.border")
+    table.add_column("Image", style="bold white")
+    table.add_column("Version", style="haibox.value")
     table.add_column("Status")
-    table.add_column("Image reference")
-    table.add_column("Depends on")
-    table.add_column("Tools")
+    table.add_column("Image reference", style="haibox.muted")
+    table.add_column("Depends on", style="haibox.info")
+    table.add_column("Tools", style="haibox.value")
     for manifest in manifests.values():
+        if manifest.status == "active":
+            status_style = "[haibox.ok]Active[/haibox.ok]"
+        else:
+            status_style = "[haibox.warn]Experimental[/haibox.warn]"
         table.add_row(
             escape(manifest.name),
             escape(manifest.version),
-            escape(manifest.status),
+            status_style,
             escape(manifest.image_ref),
             escape(", ".join(manifest.depends_on) or "-"),
             str(len(manifest.tools)),
         )
-    console.print(table)
+    ui.get_console().print("[haibox.section]▸ Available images[/haibox.section]")
+    ui.get_console().print(table)
 
 
 @image_app.command("inspect")

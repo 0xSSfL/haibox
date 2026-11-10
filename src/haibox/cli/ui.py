@@ -18,19 +18,22 @@ from rich.theme import Theme
 THEME = Theme(
     {
         "haibox.brand": "bold cyan",
-        "haibox.heading": "bold magenta",
+        "haibox.heading": "bold #eab308",
+        "haibox.section": "bold #eab308",
         "haibox.ok": "bold green",
-        "haibox.warn": "bold yellow",
+        "haibox.warn": "bold #f59e0b",
         "haibox.err": "bold red",
-        "haibox.info": "cyan",
-        "haibox.muted": "dim",
-        "haibox.key": "bold",
+        "haibox.info": "bold #38bdf8",
+        "haibox.muted": "dim #64748b",
+        "haibox.key": "bold cyan",
         "haibox.value": "white",
-        "haibox.accent": "bold blue",
+        "haibox.accent": "bold #eab308",
         "haibox.prompt": "bold cyan",
-        "haibox.border": "cyan",
-        "haibox.success": "green",
-        "haibox.failure": "red",
+        "haibox.border": "#2b3d52",
+        "haibox.success": "bold green",
+        "haibox.failure": "bold red",
+        "haibox.tag": "bold #38bdf8",
+        "haibox.gold": "bold #eab308",
     }
 )
 
@@ -183,7 +186,7 @@ def choose(question: str, choices: list[tuple[str, str]], *, default: str | None
 
     if not choices:
         raise ValueError("choose() requires at least one choice")
-    get_console().print(f"\n[haibox.heading]{question}[/haibox.heading]")
+    get_console().print(f"\n[haibox.heading]▸ {question}[/haibox.heading]")
     for index, (_key, label) in enumerate(choices, start=1):
         get_console().print(f"  [haibox.accent]{index:>2}[/haibox.accent]. {label}")
     keys = [key for key, _ in choices]
