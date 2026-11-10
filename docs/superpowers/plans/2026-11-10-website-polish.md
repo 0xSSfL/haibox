@@ -240,7 +240,7 @@ Capture the requested Home hero, Quick Start, footer, desktop navigation, mobile
 
 The CUA browser host was unavailable. No rendered screenshots were captured and no visual PASS is claimed; generated HTML and responsive CSS received static checks only.
 
-- [ ] **Step 4: Confirm scope and working tree**
+- [x] **Step 4: Confirm scope and working tree**
 
 Run: `git diff --check`, `git status --short`, and `git diff --stat`.
 
