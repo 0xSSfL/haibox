@@ -70,6 +70,18 @@ class TestBasicStructure:
         assert "HAIBOX per-engagement policy" in rs
         assert "eng-001" in rs
 
+    def test_ruleset_flushes_before_redeclaring_the_table(self) -> None:
+        rs = _ruleset(engagement_id="myeng")
+        lines = rs.splitlines()
+        add_idx = lines.index("add table inet haibox-myeng")
+        flush_idx = lines.index("flush table inet haibox-myeng")
+        table_idx = next(
+            index
+            for index, line in enumerate(lines)
+            if line.startswith("table inet haibox-myeng {")
+        )
+        assert add_idx < flush_idx < table_idx
+
 
 # ---------------------------------------------------------------------------
 # Empty scope → fail-closed
@@ -330,6 +342,15 @@ class TestApplyAndRemove:
         assert call["args"] == ["nft", "-f", "-"]
         assert "table inet haibox-test-apply" in str(call["input_text"])
         assert call["timeout"] == 15
+
+    def test_apply_sends_replace_preamble(self) -> None:
+        policy = _policy(engagement_id="test-apply")
+        runner = RecordingRunner()
+        policy.apply(runner)
+
+        text = str(runner.calls[0]["input_text"])
+        assert "add table inet haibox-test-apply" in text
+        assert "flush table inet haibox-test-apply" in text
 
     def test_apply_failure_raises(self) -> None:
         policy = _policy()

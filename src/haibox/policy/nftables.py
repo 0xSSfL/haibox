@@ -2,8 +2,9 @@
 
 Each engagement bridge gets an independent nftables table (``inet
 haibox-<id>``).  The table is applied *after* the Docker network is created
-and *before* any runner container is started.  Teardown removes the table so
-host rules remain clean.
+and *before* any runner container is started.  Applying the policy again
+flushes and replaces the existing rules, so a restart cannot accumulate
+duplicate rules.  Teardown removes the table so host rules remain clean.
 
 Design principles (ADR-0003, ADR-0010):
 - Fail-closed: if ``apply()`` fails the caller must abort the engagement.
@@ -95,6 +96,13 @@ class NftablesPolicy:
         lines: list[str] = []
 
         lines.append(f"# HAIBOX per-engagement policy — {self.engagement_id}")
+        # ``add`` is idempotent, so this creates the table on first apply and
+        # leaves it in place on re-apply.  ``flush`` then clears every chain and
+        # rule before the declaration below repopulates it.  Applying the same
+        # ruleset twice therefore replaces the policy instead of appending
+        # duplicate rules.
+        lines.append(f"add table {_FAMILY} {self._table}")
+        lines.append(f"flush table {_FAMILY} {self._table}")
         lines.append(f"table {_FAMILY} {self._table} {{")
         lines.append("")
         lines.append("    chain forward {")
