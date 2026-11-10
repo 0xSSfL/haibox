@@ -105,6 +105,3 @@ extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/0xSSfL/haibox
-
-extra_javascript:
-  - javascripts/landing-animation.js

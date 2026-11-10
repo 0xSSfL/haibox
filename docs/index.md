@@ -58,18 +58,17 @@ hide:
         </div>
         <div class="hb-terminal-foot">Offline by default &middot; illustrative demo &middot; no commands executed</div>
       </div>
-      <div class="hb-visual-controls"><button class="hb-motion-toggle" type="button" aria-pressed="false" hidden>Pause animation</button></div>
     </div>
   </div>
-  <div class="hb-landing-alpha"><span aria-hidden="true">&#9888;</span><span><strong>Alpha release.</strong> External target routing and VPN/AI integration are unfinished, and image dependency scans still contain HIGH/CRITICAL findings. <a href="verification-status/">View verification status</a>.</span></div>
+  <div class="hb-landing-alpha"><span aria-hidden="true">&#9888;</span><span><strong>Alpha software.</strong> External target routing, VPN routing, and the kill switch are not implemented. AI and graphical workstation features are not implemented, and image scans retain unresolved HIGH/CRITICAL findings. <a href="verification-status/">View verification status</a>.</span></div>
 </section>
 
 ---
 
 <div class="section-header" id="features">
   <div class="section-tag">Security Architecture</div>
-  <h2 class="section-title">Built for Isolation. Verified by Default.</h2>
-  <p class="section-desc">HAIBOX enforces strict trust boundaries between your host, tool runners, and target networks.</p>
+  <h2 class="section-title">Designed for Isolation. Scoped Access Is Experimental.</h2>
+  <p class="section-desc">HAIBOX separates host data and applies deny-by-default runner profiles. Scope matchers do not yet enforce every network path.</p>
 </div>
 
 <div class="feature-grid">
@@ -103,7 +102,7 @@ hide:
       <svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#security-network"></use></svg>
     </div>
     <h3>Isolated Network Default</h3>
-    <p>Default engagements run on Docker isolated gateway mode. Zero external connectivity, preventing accidental packet leakage to LAN or internet.</p>
+    <p>Default engagements use Docker isolated gateway mode and have no external connectivity to the LAN or internet.</p>
   </div>
 
 </div>
@@ -255,56 +254,82 @@ hide:
 <div class="section-header" id="quickstart">
   <div class="section-tag">Quick Start</div>
   <h2 class="section-title">Up and Running in 3 Steps</h2>
-  <p class="section-desc">Get your isolated penetration testing environment initialized in minutes.</p>
+  <p class="section-desc">Install HAIBOX, configure Docker, then start an offline demo.</p>
 </div>
 
-<div class="feature-grid">
+<div class="quickstart-grid">
 
-  <div class="feature-card">
+  <div class="feature-card quickstart-card" markdown="1">
     <div class="feature-icon-wrapper">
       <svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#quick-start-install"></use></svg>
     </div>
     <h3>1. Install HAIBOX</h3>
-    <p>Install via the verified release script using <code>uv tool install</code>:</p>
-    <div class="toolkit-code" style="margin-top: 0.8rem;">curl -fsSL https://0xssfl.github.io/haibox/install.sh | bash</div>
+    <p>The installer checks the release checksum and installs the CLI with <code>uv tool install</code>.</p>
+
+```bash
+curl -fsSL \
+  https://0xssfl.github.io/haibox/install.sh \
+  | bash
+```
+
+    <p class="hb-quickstart-link"><a href="user-guide/">Review installation requirements</a></p>
   </div>
 
-  <div class="feature-card">
+  <div class="feature-card quickstart-card" markdown="1">
     <div class="feature-icon-wrapper">
       <svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#quick-start-docker"></use></svg>
     </div>
-    <h3>2. Setup Docker Context</h3>
-    <p>Create the client-side context and verify host prerequisites:</p>
-    <div class="toolkit-code" style="margin-top: 0.8rem;">docker context create haibox --docker "host=unix:///var/run/docker.sock" && haibox init && haibox doctor</div>
+    <h3>2. Configure Docker</h3>
+    <p>Create the client-side context, initialize HAIBOX, and check host prerequisites:</p>
+
+```bash
+docker context create haibox \
+  --docker "host=unix:///var/run/docker.sock"
+haibox init
+haibox doctor
+```
+
+    <p class="hb-quickstart-link"><a href="user-guide/">Read the Docker setup notes</a></p>
   </div>
 
-  <div class="feature-card">
+  <div class="feature-card quickstart-card" markdown="1">
     <div class="feature-icon-wrapper">
       <svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#quick-start-engagement"></use></svg>
     </div>
-    <h3>3. Launch an Engagement</h3>
-    <p>Initialize a workspace and open an interactive isolated shell:</p>
-    <div class="toolkit-code" style="margin-top: 0.8rem;">haibox engagement init demo --profile web-security --allow-empty-scope && haibox shell</div>
+    <h3>3. Launch an Offline Demo</h3>
+    <p>Build a toolkit, create an empty-scope demo, and open its shell:</p>
+
+```bash
+haibox image build web-security
+haibox engagement init demo \
+  --name "Offline demo" \
+  --profile web-security \
+  --allow-empty-scope
+haibox run -- nmap --version
+haibox shell
+```
+
+    <p class="hb-quickstart-link"><a href="user-guide/">Read the engagement and scope guide</a></p>
   </div>
 
 </div>
 
-<div class="security-banner">
+<div class="security-banner" role="note" aria-labelledby="security-notice-title">
   <div class="security-banner-icon">
     <svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#warning"></use></svg>
   </div>
   <div class="security-banner-content">
-    <h4>Alpha Software Notice & Security Boundaries</h4>
-    <p>
-      The default runner network has no external connectivity. Scope matchers check policy before execution;
-      they are not a replacement for network-layer enforcement. Use HAIBOX only on systems you own or have explicit,
-      written authorization to assess. Review <a href="threat-model/">Threat Model</a> and <a href="https://github.com/0xSSfL/haibox/blob/main/SECURITY.md" target="_blank" rel="noopener">SECURITY.md</a>.
-    </p>
+    <h4 id="security-notice-title">Alpha software: current limits</h4>
+    <ul class="security-banner-list">
+      <li><strong>Image risk:</strong> dependency scans retain unresolved HIGH/CRITICAL findings.</li>
+      <li><strong>Default network:</strong> runners have no external connectivity.</li>
+      <li><strong>Scoped profile:</strong> experimental forward-path prototype; host services and Docker's embedded DNS are not covered, and negative integration tests are incomplete.</li>
+      <li><strong>VPN:</strong> runner routing and the kill switch are not implemented.</li>
+      <li><strong>AI:</strong> AI features are not implemented.</li>
+      <li><strong>Graphical workstation:</strong> graphical workstation features are not implemented.</li>
+    </ul>
+    <p>Use HAIBOX only on systems you own or have explicit, written authorization to assess. Review the <a href="threat-model/">Threat Model</a> and <a href="https://github.com/0xSSfL/haibox/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer">Security Policy</a>.</p>
   </div>
 </div>
 
-<div style="text-align: center; margin: 3rem 0 2rem;">
-  <a href="user-guide/" class="btn-primary" style="font-size: 1.05rem; padding: 0.85rem 2.2rem;">
-    <svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#documentation"></use></svg> Read the Full Documentation
-  </a>
-</div>
+<p class="hb-documentation-cta"><svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#documentation"></use></svg> <a href="user-guide/">Continue to the HAIBOX User Guide <span aria-hidden="true">&#8594;</span></a></p>

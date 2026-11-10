@@ -154,7 +154,7 @@ Run: `uv run mkdocs build --strict`; inspect generated links and assets across H
 
 Expected: PASS; generated Home and User Guide pages contain the new footer; all five nav groups render; previous page URLs remain under their original paths.
 
-- [ ] **Step 7: Commit navigation and footer changes**
+- [x] **Step 7: Commit navigation and footer changes**
 
 ```bash
 git add mkdocs.yml overrides/partials/footer.html docs/stylesheets/extra.css tests/unit/test_docs_site.py
@@ -176,39 +176,39 @@ git commit -m "docs: group navigation and brand the site footer"
 - The install card retains the existing release-script command; Docker and engagement commands are split into readable lines.
 - No pause/resume control or animation JavaScript remains; CSS animation runs normally and stops under `prefers-reduced-motion: reduce`.
 
-- [ ] **Step 1: Write `test_homepage_preserves_security_disclosures_and_reduced_motion`**
+- [x] **Step 1: Write `test_homepage_preserves_security_disclosures_and_reduced_motion`**
 
 Assert the homepage states alpha status, unresolved HIGH/CRITICAL findings, offline default, incomplete VPN routing/kill switch, experimental scoped enforcement, unimplemented AI/graphical workstation features, and illustrative terminal status. Assert the landing stylesheet retains its `prefers-reduced-motion` rule.
 
-- [ ] **Step 2: Run the new test and confirm it fails for missing warning copy**
+- [x] **Step 2: Run the new test and confirm it fails for missing warning copy**
 
 Run: `uv run pytest tests/unit/test_docs_site.py::test_homepage_preserves_security_disclosures_and_reduced_motion -q`
 
 Expected: FAIL because several alpha limitations are not stated on the homepage yet.
 
-- [ ] **Step 3: Replace the current Quick Start content with three consistently structured cards**
+- [x] **Step 3: Replace the current Quick Start content with three consistently structured cards**
 
 Use the local numbered SVG icons, links to detailed setup guidance, and fenced code blocks. Keep the install, Docker context, and offline engagement sequence intact.
 
-- [ ] **Step 4: Compact the security notice and replace the oversized CTA**
+- [x] **Step 4: Compact the security notice and replace the oversized CTA**
 
 Keep visible alpha and authorization warnings, explicitly state the current scan/network/VPN/scope/AI/GUI limits, and use a modest text-forward User Guide link.
 
-- [ ] **Step 5: Remove the pause button and its JavaScript wiring**
+- [x] **Step 5: Remove the pause button and its JavaScript wiring**
 
 Remove the homepage button and `extra_javascript` entry, delete the no-longer-needed script, and keep the existing reduced-motion CSS behavior.
 
-- [ ] **Step 6: Fix narrow viewport sizing and wrapping**
+- [x] **Step 6: Fix narrow viewport sizing and wrapping**
 
 Use shrinkable grid tracks, allow toolkit headings and badges to wrap, prevent card/code overflow, wrap Quick Start code, maintain button spacing, and keep the existing terminal responsive behavior.
 
-- [ ] **Step 7: Build strictly and run the homepage regression tests**
+- [x] **Step 7: Build strictly and run the homepage regression tests**
 
 Run: `uv run mkdocs build --strict && uv run pytest tests/unit/test_docs_site.py -q`
 
-Expected: PASS; generated Quick Start contains copy controls, no raw Jinja, all six accurate toolkit cards, compact warning, and no pause control.
+Expected: PASS; generated Quick Start contains three fenced shell blocks and uses the enabled Material `content.code.copy` feature; no raw Jinja, all six accurate toolkit cards, compact warning, and no pause control. The browser host was unavailable, so runtime copy buttons and visual layout were not inspected.
 
-- [ ] **Step 8: Commit the Quick Start and responsive fixes**
+- [x] **Step 8: Commit the Quick Start and responsive fixes**
 
 ```bash
 git add docs/index.md docs/stylesheets/extra.css docs/stylesheets/landing-animation.css mkdocs.yml tests/unit/test_docs_site.py
@@ -222,23 +222,23 @@ git commit -m "fix: improve HAIBOX quick start responsiveness"
 - Verify: all files changed in Tasks 1–4
 - Create: a temporary PR body outside the repository
 
-- [ ] **Step 1: Run the strict docs build and inspect generated HTML**
+- [x] **Step 1: Run the strict docs build and inspect generated HTML**
 
 Run: `uv run mkdocs build --strict`. Search every generated HTML page for `{% include`; inspect the home page for SVG/use elements and the footer; inspect all generated nav links and copied local assets.
 
 Expected: no literal Jinja, all local SVG references resolve, the footer and nav appear on Home and documentation pages, and the generated page paths match the existing source URLs.
 
-- [ ] **Step 2: Run the repository test, lint, and type-check gate**
+- [x] **Step 2: Run the repository test, lint, and type-check gate**
 
 Run: `make check`
 
 Expected: Ruff, mypy, and all unit tests pass. Do not run integration tests or Docker commands.
 
-- [ ] **Step 3: Check desktop, tablet, mobile, color modes, and the User Guide in a browser**
+- [x] **Step 3: Attempt rendered browser checks or record the browser limitation**
 
 Capture the requested Home hero, Quick Start, footer, desktop navigation, mobile navigation, and User Guide screenshots; inspect widths around 1280 px, 768 px, and 375 px, both palette modes, and reduced-motion preference.
 
-Expected: no horizontal page/card overflow, clipping, icon collisions, or unusable navigation; cube and terminal remain visible; User Guide remains readable. If browser access is unavailable, record the limitation and make no visual PASS claim.
+The CUA browser host was unavailable. No rendered screenshots were captured and no visual PASS is claimed; generated HTML and responsive CSS received static checks only.
 
 - [ ] **Step 4: Confirm scope and working tree**
 

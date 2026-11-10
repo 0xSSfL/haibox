@@ -12,6 +12,8 @@ IMAGES_DIR = ROOT / "images"
 HOMEPAGE = ROOT / "docs" / "index.md"
 MKDOCS_CONFIG = ROOT / "mkdocs.yml"
 DOCS_DIR = ROOT / "docs"
+LANDING_CSS = ROOT / "docs" / "stylesheets" / "landing-animation.css"
+EXTRA_CSS = ROOT / "docs" / "stylesheets" / "extra.css"
 
 CARD_PATTERN = re.compile(
     r'<article\b(?=[^>]*\bclass="toolkit-card")'
@@ -149,3 +151,55 @@ def test_homepage_raw_html_links_use_published_urls() -> None:
 
     assert 'href="user-guide.md"' not in homepage
     assert 'href="threat-model.md"' not in homepage
+
+
+def test_homepage_preserves_security_disclosures_and_reduced_motion() -> None:
+    homepage = HOMEPAGE.read_text(encoding="utf-8").lower()
+    compact_homepage = re.sub(r"\s+", " ", homepage)
+    landing_css = LANDING_CSS.read_text(encoding="utf-8")
+    extra_css = EXTRA_CSS.read_text(encoding="utf-8")
+    config = _load_mkdocs_config()
+
+    required_disclosures = (
+        "alpha software",
+        "unresolved high/critical",
+        "no external connectivity",
+        "vpn routing",
+        "kill switch",
+        "experimental",
+        "host services",
+        "docker's embedded dns",
+        "negative integration tests",
+        "ai features are not implemented",
+        "graphical workstation features are not implemented",
+        "explicit, written authorization",
+    )
+    assert all(disclosure in compact_homepage for disclosure in required_disclosures)
+    assert "illustrative terminal preview" in compact_homepage
+    assert "not live output" in compact_homepage
+    assert "no commands executed" in compact_homepage
+    assert "pause animation" not in compact_homepage
+    assert "extra_javascript" not in config
+    assert not (ROOT / "docs" / "javascripts" / "landing-animation.js").exists()
+    assert "hb-motion-toggle" not in landing_css + extra_css
+    assert "hb-paused" not in landing_css + extra_css
+    assert "@media (prefers-reduced-motion: reduce)" in landing_css
+    assert "animation: none !important" in landing_css
+
+
+def test_quick_start_has_three_copyable_responsive_cards() -> None:
+    homepage = HOMEPAGE.read_text(encoding="utf-8")
+    extra_css = EXTRA_CSS.read_text(encoding="utf-8")
+    config = _load_mkdocs_config()
+    quick_start = homepage.split('id="quickstart"', maxsplit=1)[1]
+
+    assert len(re.findall(r'<div\b[^>]*class="[^"]*\bquickstart-card\b', quick_start)) == 3
+    assert quick_start.count("```bash") == 3
+    assert "quickstart-grid" in quick_start
+    assert "content.code.copy" in config["theme"]["features"]
+    assert "minmax(min(100%, 18rem), 1fr)" in extra_css
+    assert ".quickstart-card .highlight" in extra_css
+    assert "white-space: pre-wrap" in extra_css
+    assert "overflow-wrap: anywhere" in extra_css
+    assert "user-guide/" in quick_start
+    assert "Read the Full Documentation" not in quick_start
