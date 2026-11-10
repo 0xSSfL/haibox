@@ -225,7 +225,11 @@ def engagement_destroy(
             raise EngagementError(
                 f"network {network_name!r} still exists; remove it first or pass --force"
             )
-        runtime.network_remove(network_name)
+        network_mode = engagement.runtime.network_mode
+        runtime.network_remove(
+            network_name,
+            network_profile=network_mode if network_mode != "none" else None,
+        )
         obj.audit(
             "network.removed",
             engagement=engagement.id,

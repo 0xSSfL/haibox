@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
-    from haibox.models import Scope
+    from haibox.models import NetworkProfile, Scope
     from haibox.runtime.spec import ContainerSpec
     from haibox.runtime.vpn_spec import VpnGatewaySpec
 
@@ -85,7 +85,12 @@ class ContainerRuntime(Protocol):
     def ensure_available(self) -> str:
         """Return the server version or raise RuntimeFailure."""
 
-    def network_create(self, name: str, engagement_id: str) -> None: ...
+    def network_create(
+        self,
+        name: str,
+        engagement_id: str,
+        network_profile: NetworkProfile | None = None,
+    ) -> None: ...
 
     def vpn_network_create(self, name: str, vpn_name: str) -> None: ...
 
@@ -93,7 +98,9 @@ class ContainerRuntime(Protocol):
 
     def network_exists(self, name: str) -> bool: ...
 
-    def network_remove(self, name: str) -> None: ...
+    def network_remove(
+        self, name: str, network_profile: NetworkProfile | None = None
+    ) -> None: ...
 
     def apply_policy(self, scope: Scope, bridge: str, engagement_id: str) -> None: ...
 

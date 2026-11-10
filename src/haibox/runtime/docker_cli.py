@@ -7,7 +7,6 @@ security shape of a container immediately after creation.
 
 from __future__ import annotations
 
-import contextlib
 import json
 import re
 from collections.abc import Callable
@@ -194,15 +193,23 @@ class DockerCli:
             gateway=_optional_text(first.get("Gateway")),
         )
 
-    def network_create(self, name: str, engagement_id: str) -> None:
+    def network_create(
+        self,
+        name: str,
+        engagement_id: str,
+        network_profile: NetworkProfile | None = None,
+    ) -> None:
         if not _NETWORK_RE.fullmatch(name):
             raise ContainerError(f"invalid network name: {name!r}")
+        profile = network_profile or self.network_profile
         if self.network_exists(name):
-            info = self._require_managed_network(name, engagement_id)
-            self._require_network_profile(info)
+            info = self._require_managed_network(
+                name, engagement_id, network_profile=profile
+            )
+            self._require_network_profile(info, profile)
             return
         args = ["network", "create", "--driver", "bridge"]
-        if self.network_profile == "isolated":
+        if profile == "isolated":
             args.extend(
                 [
                     "--internal",
@@ -219,19 +226,24 @@ class DockerCli:
                 "--label",
                 f"haibox.engagement={engagement_id}",
                 "--label",
-                f"haibox.network-profile={self.network_profile}",
+                f"haibox.network-profile={profile}",
                 "--label",
                 "haibox.created-by=haibox-platform",
                 name,
             ]
         )
         self._check(args)
-        self._require_network_profile(self.network_inspect(name))
+        self._require_network_profile(self.network_inspect(name), profile)
 
-    def ensure_network(self, name: str, engagement_id: str) -> None:
+    def ensure_network(
+        self,
+        name: str,
+        engagement_id: str,
+        network_profile: NetworkProfile | None = None,
+    ) -> None:
         if name == "none":
             return
-        self.network_create(name, engagement_id)
+        self.network_create(name, engagement_id, network_profile)
 
     def vpn_network_create(self, name: str, vpn_name: str) -> None:
         """Create a labelled bridge with egress for the trusted VPN gateway.
@@ -288,7 +300,10 @@ class DockerCli:
         self._check(["network", "rm", name])
 
     def _require_managed_network(
-        self, name: str, engagement_id: str | None = None
+        self,
+        name: str,
+        engagement_id: str | None = None,
+        network_profile: NetworkProfile | None = None,
     ) -> NetworkInfo:
         info = self.network_inspect(name)
         if not info.managed:
@@ -299,12 +314,16 @@ class DockerCli:
             raise ContainerError(
                 f"refusing to use network {name!r}: it belongs to another engagement"
             )
-        if self.network_profile == "isolated" and not info.internal:
+        profile = network_profile or self.network_profile
+        if profile == "isolated" and not info.internal:
             raise ContainerError(f"refusing network {name!r}: it is not internal")
         return info
 
-    def _require_network_profile(self, info: NetworkInfo) -> None:
-        if self.network_profile == "isolated":
+    def _require_network_profile(
+        self, info: NetworkInfo, network_profile: NetworkProfile | None = None
+    ) -> None:
+        profile = network_profile or self.network_profile
+        if profile == "isolated":
             if (
                 info.gateway_mode_ipv4 != "isolated"
                 or info.gateway_mode_ipv6 != "isolated"
@@ -320,21 +339,38 @@ class DockerCli:
                     f"refusing network {info.name!r}: it still has a host gateway "
                     f"address ({info.gateway})"
                 )
-        elif self.network_profile == "scoped":
+        elif profile == "scoped":
             if info.labels.get("haibox.network-profile") != "scoped":
                 raise ContainerError(
                     f"refusing network {info.name!r}: missing haibox.network-profile=scoped label"
                 )
 
-    def network_remove(self, name: str) -> None:
+    def network_remove(
+        self, name: str, network_profile: NetworkProfile | None = None
+    ) -> None:
         if not _NETWORK_RE.fullmatch(name):
             raise ContainerError(f"invalid network name: {name!r}")
-        info = self._require_managed_network(name)
+        info = self.network_inspect(name)
+        # The network label records the profile used at creation, so cleanup
+        # does not depend on the current global configuration.
+        label_profile = info.labels.get("haibox.network-profile")
+        profile: NetworkProfile
+        if network_profile is not None:
+            profile = network_profile
+        elif label_profile == "scoped":
+            profile = "scoped"
+        elif label_profile == "isolated":
+            profile = "isolated"
+        else:
+            profile = self.network_profile
+        self._require_managed_network(name, network_profile=profile)
         engagement_id = info.labels.get("haibox.engagement")
+        # Remove the policy before the network: if nftables cleanup fails, the
+        # network is left in place so the operator can retry instead of
+        # silently losing the error.
+        if engagement_id and profile == "scoped":
+            self.remove_policy(engagement_id)
         self._check(["network", "rm", name])
-        if engagement_id:
-            with contextlib.suppress(Exception):
-                self.remove_policy(engagement_id)
 
     # ------------------------------------------------------------------ policy
     def apply_policy(self, scope: Scope, bridge: str, engagement_id: str) -> None:
@@ -364,13 +400,27 @@ class DockerCli:
         if self.inspect_container_optional(spec.name) is not None:
             raise ContainerError(f"container already exists: {spec.name}")
         engagement_id = spec.labels["haibox.engagement"]
-        self.ensure_network(spec.network, engagement_id)
-        if self.network_profile == "scoped" and spec.network != "none":
+        # The engagement snapshot is authoritative: never widen an existing
+        # engagement just because the global config now says ``scoped`` (or
+        # vice versa).  A ``none`` network never reaches the bridge path, so
+        # the profile only needs to distinguish isolated from scoped here.
+        network_profile: NetworkProfile = (
+            "isolated" if spec.network_profile == "none" else spec.network_profile
+        )
+        self.ensure_network(spec.network, engagement_id, network_profile)
+        if network_profile == "scoped" and spec.network != "none":
             net_info = self.network_inspect(spec.network)
             bridge = net_info.bridge_interface
-            if bridge:
-                scope = load_scope(spec.scope_file)
-                self.apply_policy(scope, bridge, engagement_id)
+            if bridge is None:
+                # Fail closed: without a resolvable bridge there is no policy
+                # enforcement point, so the runner must not be created.
+                raise ContainerError(
+                    f"refusing to create a scoped runner: network {spec.network!r} "
+                    "does not expose a bridge interface, so the nftables policy "
+                    "cannot be applied"
+                )
+            scope = load_scope(spec.scope_file)
+            self.apply_policy(scope, bridge, engagement_id)
         result = self._check(spec.to_create_args(), timeout=max(self.settings.timeout_seconds, 120))
         container_id = result.stdout.strip()
         try:
