@@ -10,6 +10,7 @@ from typing import Any
 
 import typer
 import yaml
+from rich import box
 from rich.markup import escape
 from rich.table import Table
 
@@ -179,12 +180,14 @@ def doctor(
     if json_output:
         typer.echo(json.dumps({"checks": checks}, indent=2, sort_keys=True))
     else:
-        table = Table(title="HAIBOX doctor")
-        table.add_column("Check")
+        table = Table(title="HAIBOX doctor", box=box.ROUNDED, border_style="haibox.border")
+        table.add_column("Check", style="haibox.key")
         table.add_column("Status")
-        table.add_column("Detail")
+        table.add_column("Detail", style="haibox.muted")
         for check in checks:
-            status = "[green]ok[/green]" if check["ok"] else "[red]fail[/red]"
+            status = (
+                "[haibox.ok]ok[/haibox.ok]" if check["ok"] else "[haibox.warn]fail[/haibox.warn]"
+            )
             table.add_row(str(check["name"]), status, escape(str(check["detail"])))
         console.print(table)
 
@@ -230,18 +233,53 @@ def info(
     if json_output or obj.json_output:
         typer.echo(json.dumps(data, indent=2, sort_keys=True))
         return
-    table = Table(title="HAIBOX environment", border_style="haibox.border")
-    table.add_column("Key", style="haibox.key")
-    table.add_column("Value", style="haibox.value")
+
+    console = ui.get_console()
+    console.print(
+        f"[[haibox.info]*[/haibox.info]] [bold white]HAIBOX[/bold white] "
+        f"[haibox.gold]Security Workstation[/haibox.gold] is currently in version "
+        f"[haibox.tag]v{__version__}[/haibox.tag]"
+    )
+    console.print(
+        "[[haibox.info]*[/haibox.info]] More about HAIBOX at: "
+        "[haibox.info]https://0xssfl.github.io/haibox/[/haibox.info]\n"
+    )
+
+    console.print("[haibox.section]▸ Available images[/haibox.section]")
+    img_table = Table(box=box.ROUNDED, border_style="haibox.border")
+    img_table.add_column("Image", style="bold white")
+    img_table.add_column("Version", style="haibox.value")
+    img_table.add_column("Status")
+    img_table.add_column("Depends on", style="haibox.info")
+    img_table.add_column("Tools", style="haibox.value")
+    for name, manifest in images.items():
+        if manifest.status == "active":
+            status_style = "[haibox.ok]Active[/haibox.ok]"
+        else:
+            status_style = "[haibox.warn]Experimental[/haibox.warn]"
+        img_table.add_row(
+            escape(name),
+            escape(manifest.version),
+            status_style,
+            escape(", ".join(manifest.depends_on) or "-"),
+            str(len(manifest.tools)),
+        )
+    console.print(img_table)
+    console.print()
+
+    console.print("[haibox.section]▸ Environment & Runtime[/haibox.section]")
+    env_table = Table(box=box.ROUNDED, border_style="haibox.border")
+    env_table.add_column("Key", style="haibox.key")
+    env_table.add_column("Value", style="haibox.value")
     for key, value in data.items():
-        if isinstance(value, dict):
-            rendered = ", ".join(f"{k} ({v['status']})" for k, v in value.items())
-        elif isinstance(value, list):
+        if key == "images":
+            continue
+        if isinstance(value, list):
             rendered = ", ".join(str(item) for item in value) or "(none)"
         else:
             rendered = str(value) if value is not None else "(none)"
-        table.add_row(key, escape(rendered))
-    ui.get_console().print(table)
+        env_table.add_row(key, escape(rendered))
+    console.print(env_table)
 
 
 @app.command()

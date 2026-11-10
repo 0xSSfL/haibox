@@ -10,6 +10,7 @@ from __future__ import annotations
 import sys
 
 import typer
+from rich import box
 from rich.table import Table
 from typer.testing import CliRunner
 
@@ -205,7 +206,7 @@ def _status_panel(ctx: typer.Context) -> None:
     obj = ctx.obj
     if not isinstance(obj, AppContext):
         return
-    table = Table(title="HAIBOX", border_style="haibox.border", show_header=False)
+    table = Table(box=box.ROUNDED, border_style="haibox.border", show_header=False)
     table.add_column("Key", style="haibox.key")
     table.add_column("Value", style="haibox.value")
     table.add_row("Config", str(obj.paths.config_file))

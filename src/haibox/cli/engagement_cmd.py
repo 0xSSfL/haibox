@@ -7,10 +7,12 @@ import json
 import typer
 import yaml
 from pydantic import ValidationError as PydanticValidationError
+from rich import box
 from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
 
+from haibox.cli import ui
 from haibox.cli.context import get_context
 from haibox.engagement import EngagementManager
 from haibox.errors import EngagementError, ValidationError
@@ -112,23 +114,29 @@ def engagement_list(ctx: typer.Context) -> None:
     obj = get_context(ctx)
     engagements = EngagementManager(obj.paths).list()
     if not engagements:
-        console.print("No engagements.")
+        ui.get_console().print("[haibox.muted]No engagements.[/haibox.muted]")
         return
-    table = Table(title="Engagements")
-    table.add_column("ID")
-    table.add_column("Name")
-    table.add_column("Profile")
+    ui.get_console().print("[haibox.section]▸ Engagements[/haibox.section]")
+    table = Table(box=box.ROUNDED, border_style="haibox.border", show_header=True)
+    table.add_column("ID", style="bold white")
+    table.add_column("Name", style="haibox.info")
+    table.add_column("Profile", style="haibox.key")
     table.add_column("Status")
-    table.add_column("Workspace")
+    table.add_column("Workspace", style="haibox.muted")
     for engagement in engagements:
+        status_badge = (
+            "[haibox.ok]active[/haibox.ok]"
+            if engagement.status == "active"
+            else f"[haibox.warn]{escape(engagement.status)}[/haibox.warn]"
+        )
         table.add_row(
             escape(engagement.id),
             escape(engagement.name),
             escape(engagement.profile),
-            escape(engagement.status),
+            status_badge,
             escape(str(obj.paths.workspace_dir(engagement.id))),
         )
-    console.print(table)
+    ui.get_console().print(table)
 
 
 @engagement_app.command("show")

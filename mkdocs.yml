@@ -44,6 +44,7 @@ theme:
 
 extra_css:
   - stylesheets/extra.css
+  - stylesheets/landing-animation.css
 
 nav:
   - Home: index.md
@@ -95,3 +96,6 @@ extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/0xSSfL/haibox
+
+extra_javascript:
+  - javascripts/landing-animation.js

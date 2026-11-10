@@ -6,10 +6,12 @@ import dataclasses
 import json
 
 import typer
+from rich import box
 from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
 
+from haibox.cli import ui
 from haibox.cli.context import AppContext, get_context
 from haibox.engagement import EngagementManager
 from haibox.errors import ContainerError
@@ -154,21 +156,27 @@ def container_ps(
     obj = get_context(ctx)
     containers = obj.get_runtime().list_containers(all=all_containers)
     if not containers:
-        console.print("No HAIBOX containers.")
+        ui.get_console().print("[haibox.muted]No HAIBOX containers.[/haibox.muted]")
         return
-    table = Table(title="HAIBOX containers")
-    table.add_column("Name")
-    table.add_column("Engagement")
+    ui.get_console().print("[haibox.section]▸ Available containers[/haibox.section]")
+    table = Table(box=box.ROUNDED, border_style="haibox.border", show_header=True)
+    table.add_column("Container tag", style="bold white")
+    table.add_column("Engagement", style="haibox.muted")
     table.add_column("State")
-    table.add_column("Image")
+    table.add_column("Image", style="haibox.info")
     for item in containers:
+        state_badge = (
+            "[haibox.ok]Running[/haibox.ok]"
+            if item.state == "running"
+            else f"[haibox.muted]{escape(item.state)}[/haibox.muted]"
+        )
         table.add_row(
             escape(item.name),
             escape(item.engagement or ""),
-            escape(item.state),
+            state_badge,
             escape(item.image),
         )
-    console.print(table)
+    ui.get_console().print(table)
 
 
 @container_app.command("inspect")
