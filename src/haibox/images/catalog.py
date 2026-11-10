@@ -16,14 +16,18 @@ from haibox.models import ImageManifest
 def default_images_root() -> Path:
     """Resolve the image-definition directory.
 
-    ``HAIBOX_IMAGES_DIR`` wins, then the repository checkout that contains the
-    installed package.  The first milestone runs from a source checkout; a
-    future packaged release will ship manifests as package data.
+    ``HAIBOX_IMAGES_DIR`` wins, then the image catalog bundled in the installed
+    wheel (``haibox/data/images``), then the source checkout that contains the
+    package.  Bundling the catalog keeps ``haibox image`` working when the CLI
+    is installed outside a repository.
     """
 
     override = os.environ.get("HAIBOX_IMAGES_DIR")
     if override:
         return Path(override).expanduser().resolve()
+    packaged = Path(__file__).resolve().parents[1] / "data" / "images"
+    if packaged.is_dir():
+        return packaged
     # src/haibox/images/catalog.py -> parents[3] is the repository root.
     return Path(__file__).resolve().parents[3] / "images"
 

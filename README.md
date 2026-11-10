@@ -40,13 +40,17 @@ Linux; a VM is optional, not a requirement.
 
 ## Quick start
 
-### 1. Install from source
+### 1. Install HAIBOX
 
-You need **Linux, Docker Engine 28+, Python 3.11+, Git, and uv**. Fedora is the
-recorded development environment. Image builds need internet access.
+```bash
+curl -fsSL https://0xssfl.github.io/haibox/install.sh | bash
+```
 
-Review the [host Docker notes](docs/host-docker-review.md) before running your
-first workload. Access to a rootful Docker daemon is highly privileged.
+The installer bootstraps `uv`, verifies the release checksum, and installs the
+`haibox` command with `uv tool install`. You need **Linux, Docker Engine 28+,
+and Git**. Image builds need internet access.
+
+To work from source instead:
 
 ```bash
 git clone https://github.com/0xSSfL/haibox.git
@@ -54,15 +58,21 @@ cd haibox
 uv sync --locked --extra dev
 ```
 
+Review the [host Docker notes](docs/host-docker-review.md) before running your
+first workload. Access to a rootful Docker daemon is highly privileged.
+
 ### 2. Set up Docker and HAIBOX
 
 For a local rootful Docker installation, create this client-side context once:
 
 ```bash
 docker context create haibox --docker "host=unix:///var/run/docker.sock"
-uv run haibox init
-uv run haibox doctor
+haibox init
+haibox doctor
 ```
+
+If you installed from source, prefix commands with `uv run` (for example,
+`uv run haibox init`).
 
 Already have a `haibox` context? Inspect its endpoint with
 `docker context inspect haibox` instead of recreating it. **A named context does
