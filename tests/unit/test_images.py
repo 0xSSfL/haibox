@@ -9,7 +9,7 @@ import yaml
 
 from haibox.errors import ImageError
 from haibox.images.builder import ImageBuilder, tools_digest
-from haibox.images.catalog import ImageCatalog
+from haibox.images.catalog import ImageCatalog, default_images_root
 from haibox.images.scan import ImageScanner, ScanResult
 from haibox.images.verify import ImageVerifier, verification_script
 from haibox.models import ImageManifest, ImageTool
@@ -299,3 +299,34 @@ def test_scanner_findings_are_not_ok() -> None:
 def test_scan_result_property() -> None:
     assert ScanResult("trivy", 0, "").ok
     assert not ScanResult("trivy", 1, "").ok
+
+
+def test_default_images_root_prefers_override(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    override = tmp_path / "custom-images"
+    override.mkdir()
+    monkeypatch.setenv("HAIBOX_IMAGES_DIR", str(override))
+    assert default_images_root() == override.resolve()
+
+
+def test_default_images_root_prefers_packaged(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("HAIBOX_IMAGES_DIR", raising=False)
+    fake_packaged = tmp_path / "haibox" / "data" / "images"
+    fake_packaged.mkdir(parents=True)
+    fake_catalog_file = tmp_path / "haibox" / "images" / "catalog.py"
+    fake_catalog_file.parent.mkdir(parents=True)
+    fake_catalog_file.touch()
+
+    monkeypatch.setattr("haibox.images.catalog.__file__", str(fake_catalog_file))
+    assert default_images_root() == fake_packaged.resolve()
+
+
+def test_default_images_root_falls_back_to_repo_root(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("HAIBOX_IMAGES_DIR", raising=False)
+    root = default_images_root()
+    assert root.is_dir()
+    assert (root / "core" / "manifest.yaml").is_file()
+

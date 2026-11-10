@@ -38,12 +38,23 @@ dev = [
   "mypy>=1.10,<2",
   "types-PyYAML>=6.0,<7",
 ]
+docs = [
+  "mkdocs-material>=9,<10",
+]
+
+[project.urls]
+Homepage = "https://0xssfl.github.io/haibox/"
+Documentation = "https://0xssfl.github.io/haibox/"
+Repository = "https://github.com/0xSSfL/haibox"
 
 [project.scripts]
 haibox = "haibox.cli.app:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/haibox"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"images" = "haibox/data/images"
 
 [tool.hatch.build.targets.sdist]
 include = [
