@@ -10,6 +10,8 @@ import yaml
 ROOT = Path(__file__).parents[2]
 IMAGES_DIR = ROOT / "images"
 HOMEPAGE = ROOT / "docs" / "index.md"
+MKDOCS_CONFIG = ROOT / "mkdocs.yml"
+DOCS_DIR = ROOT / "docs"
 
 CARD_PATTERN = re.compile(
     r'<article\b(?=[^>]*\bclass="toolkit-card")'
@@ -49,6 +51,27 @@ def _available_tools(
     return tools
 
 
+def _load_mkdocs_config() -> dict[str, object]:
+    class MkDocsLoader(yaml.SafeLoader):
+        pass
+
+    MkDocsLoader.add_multi_constructor(
+        "tag:yaml.org,2002:python/name:", lambda loader, suffix, node: None
+    )
+    return yaml.load(MKDOCS_CONFIG.read_text(encoding="utf-8"), Loader=MkDocsLoader)
+
+
+def _navigation_paths(items: list[dict[str, object]]) -> list[str]:
+    paths = []
+    for item in items:
+        value = next(iter(item.values()))
+        if isinstance(value, str):
+            paths.append(value)
+        else:
+            paths.extend(_navigation_paths(value))
+    return paths
+
+
 def test_homepage_toolkit_cards_match_manifests() -> None:
     manifests = _read_manifests()
     homepage = HOMEPAGE.read_text(encoding="utf-8")
@@ -84,3 +107,45 @@ def test_homepage_icons_use_local_svg_sprite() -> None:
     assert len(referenced_ids) >= 15
     assert set(referenced_ids) <= symbol_ids
     assert len(re.findall(r'<svg\b[^>]*>\s*<use\b', homepage)) >= 15
+
+
+def test_navigation_uses_five_groups_without_dropping_documents() -> None:
+    config = _load_mkdocs_config()
+    navigation = config["nav"]
+    group_names = [next(iter(item)) for item in navigation]
+    nav_paths = _navigation_paths(navigation)
+    document_paths = {
+        path.relative_to(DOCS_DIR).as_posix()
+        for path in DOCS_DIR.rglob("*.md")
+        if path.relative_to(DOCS_DIR).as_posix() != "README.md"
+        and path.relative_to(DOCS_DIR).parts[0] != "superpowers"
+    }
+
+    assert group_names == ["Home", "Getting Started", "Toolkits", "Security", "Development"]
+    assert set(nav_paths) == document_paths
+    assert all((DOCS_DIR / path).is_file() for path in nav_paths)
+
+
+def test_footer_has_branded_links_and_copyright() -> None:
+    config = _load_mkdocs_config()
+    footer_path = ROOT / "overrides" / "partials" / "footer.html"
+    assert footer_path.is_file()
+
+    footer = footer_path.read_text(encoding="utf-8")
+    assert config["copyright"] == "© 2026 HAIBOX contributors · Built by 0xSSfL"
+    assert config["theme"]["custom_dir"] == "overrides"
+    assert config["extra"]["generator"] is False
+    for label in ("Documentation", "Toolkits", "Security", "GitHub", "MIT License"):
+        assert f">{label}</a>" in footer
+    assert "{{ base_url.rstrip('/') }}/user-guide/" in footer
+    assert "{{ base_url.rstrip('/') }}/#toolkits" in footer
+    assert "{{ base_url.rstrip('/') }}/threat-model/" in footer
+    assert "{{ base_url }}/" not in footer
+    assert '{{ config.repo_url }}/blob/main/LICENSE' in footer
+
+
+def test_homepage_raw_html_links_use_published_urls() -> None:
+    homepage = HOMEPAGE.read_text(encoding="utf-8")
+
+    assert 'href="user-guide.md"' not in homepage
+    assert 'href="threat-model.md"' not in homepage

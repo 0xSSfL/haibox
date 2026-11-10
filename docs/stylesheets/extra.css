@@ -567,3 +567,105 @@
   background: #070b12 !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
+
+/* Branded footer shared by the homepage and documentation pages. */
+.md-footer.hb-footer {
+  color: #c5d2df;
+  background: #070b12;
+  border-top: 1px solid rgba(83, 244, 196, 0.18);
+}
+
+.hb-footer__main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  padding-top: 1.8rem;
+  padding-bottom: 1.8rem;
+}
+
+.hb-footer__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: #f0f6fc;
+  text-decoration: none;
+}
+
+.hb-footer__brand img {
+  display: block;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: none;
+}
+
+.hb-footer__brand-copy {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.hb-footer__brand-copy strong {
+  color: #53f4c4;
+  font-family: var(--md-code-font-family), monospace;
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+}
+
+.hb-footer__tagline {
+  color: #9aabba;
+  font-size: 0.76rem;
+}
+
+.hb-footer__nav ul {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.65rem 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hb-footer__nav a {
+  color: #c5d2df;
+  font-size: 0.78rem;
+  text-decoration: none;
+  text-underline-offset: 0.2em;
+}
+
+.hb-footer__nav a:hover {
+  color: #a3f4db;
+  text-decoration: underline;
+}
+
+.hb-footer a:focus-visible {
+  outline: 2px solid #53f4c4;
+  outline-offset: 4px;
+}
+
+.hb-footer__bottom {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: #8392a3;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  padding: 0.85rem 0;
+}
+
+@media (max-width: 720px) {
+  .hb-footer__main {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 1.35rem;
+  }
+
+  .hb-footer__nav {
+    width: 100%;
+  }
+
+  .hb-footer__nav ul {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: start;
+    gap: 0.75rem 1.25rem;
+  }
+}

@@ -9,9 +9,11 @@ docs_dir: docs
 site_dir: site
 exclude_docs: |
   /README.md
+  /superpowers/
 
 theme:
   name: material
+  custom_dir: overrides
   logo: assets/haibox-mark.png
   favicon: assets/haibox-mark.png
   font:
@@ -48,30 +50,36 @@ extra_css:
 
 nav:
   - Home: index.md
-  - User guide: user-guide.md
-  - Architecture: architecture.md
-  - Threat model: threat-model.md
-  - Image catalog: image-catalog.md
-  - Image validation: image-validation.md
-  - Vulnerability risk register: vulnerability-risk-register.md
-  - Verification status: verification-status.md
-  - Roadmap: roadmap.md
-  - Feature comparison: feature-comparison.md
-  - Host Docker review: host-docker-review.md
-  - Runbooks:
-      - KVM VM setup: runbooks/kvm-vm-setup.md
-  - ADRs:
-      - Overview: adr/README.md
-      - ADR-0001: adr/0001-dedicated-vm-and-runtime-seam.md
-      - ADR-0002: adr/0002-host-only-data-and-vault-identity.md
-      - ADR-0003: adr/0003-scope-enforcement-layers.md
-      - ADR-0004: adr/0004-defer-ai-and-vpn.md
-      - ADR-0005: adr/0005-temporary-codename.md
-      - ADR-0006: adr/0006-direct-docker-on-fedora.md
-      - ADR-0007: adr/0007-vpn-management-scope.md
-      - ADR-0008: adr/0008-engagement-network-isolation-profile.md
-      - ADR-0009: adr/0009-remove-legacy-internal-profile.md
-      - ADR-0010: adr/0010-scoped-connectivity-profile.md
+  - Getting Started:
+      - User Guide: user-guide.md
+      - Runbooks:
+          - KVM VM Setup: runbooks/kvm-vm-setup.md
+  - Toolkits:
+      - Image Catalog: image-catalog.md
+      - Image Validation: image-validation.md
+      - Feature Comparison: feature-comparison.md
+  - Security:
+      - Architecture: architecture.md
+      - Threat Model: threat-model.md
+      - Vulnerability Risk Register: vulnerability-risk-register.md
+      - Verification Status: verification-status.md
+      - Host Docker Review: host-docker-review.md
+  - Development:
+      - Roadmap: roadmap.md
+      - ADRs:
+          - Overview: adr/README.md
+          - ADR-0001: adr/0001-dedicated-vm-and-runtime-seam.md
+          - ADR-0002: adr/0002-host-only-data-and-vault-identity.md
+          - ADR-0003: adr/0003-scope-enforcement-layers.md
+          - ADR-0004: adr/0004-defer-ai-and-vpn.md
+          - ADR-0005: adr/0005-temporary-codename.md
+          - ADR-0006: adr/0006-direct-docker-on-fedora.md
+          - ADR-0007: adr/0007-vpn-management-scope.md
+          - ADR-0008: adr/0008-engagement-network-isolation-profile.md
+          - ADR-0009: adr/0009-remove-legacy-internal-profile.md
+          - ADR-0010: adr/0010-scoped-connectivity-profile.md
+
+copyright: "© 2026 HAIBOX contributors · Built by 0xSSfL"
 
 markdown_extensions:
   - admonition
@@ -93,6 +101,7 @@ markdown_extensions:
       permalink: true
 
 extra:
+  generator: false
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/0xSSfL/haibox

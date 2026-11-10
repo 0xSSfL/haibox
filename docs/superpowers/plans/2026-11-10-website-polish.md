@@ -29,7 +29,7 @@
 
 - A toolkit card shows a tool only when that tool exists in the manifest or its base image; `test_homepage_toolkit_cards_match_manifests` checks every card, tool tag, and status badge.
 - Every homepage icon symbol resolves to a local SVG and the Markdown contains no literal Jinja include; `test_homepage_icons_use_local_svg_sprite` checks the icon IDs and source.
-- Navigation keeps all current pages available and current URLs stable; `uv run mkdocs build --strict` checks configured pages and internal references, followed by an output link inventory.
+- Navigation keeps all current user-facing pages available and current URLs stable; `uv run mkdocs build --strict` checks configured pages and internal references, followed by an output link inventory. Internal `docs/superpowers/` plan records are excluded from the public site.
 - Grid tracks, badges, and long Quick Start commands fit smaller viewports; inspect rendered screenshots at desktop, tablet, and mobile sizes when browser access is available.
 - Alpha claims and motion accessibility remain accurate; Task 4 adds `test_homepage_preserves_security_disclosures_and_reduced_motion` before changing copy or controls, then checks warning text, illustrative demo label, and the reduced-motion stylesheet rule.
 
@@ -41,7 +41,7 @@
 - Create: `docs/superpowers/specs/2026-11-10-website-polish-design.md`
 - Create: `docs/superpowers/plans/2026-11-10-website-polish.md`
 
-- [ ] **Step 1: Commit the approved design and plan**
+- [x] **Step 1: Commit the approved design and plan**
 
 ```bash
 git add docs/superpowers/specs/2026-11-10-website-polish-design.md docs/superpowers/plans/2026-11-10-website-polish.md
@@ -61,52 +61,52 @@ git commit -m "docs: plan HAIBOX website polish"
 - Tool tags use `<span class="toolkit-tag">`; the badge text/class maps to the manifest `status`.
 - SVG references use `<svg><use href="assets/icons.svg#<symbol-id>"></use></svg>`.
 
-- [ ] **Step 1: Install the locked development and docs dependencies**
+- [x] **Step 1: Install the locked development and docs dependencies**
 
 Run from the worktree root: `uv sync --locked --extra dev --extra docs`
 
 Expected: sync completes from `uv.lock`; `uv run mkdocs --version` and `uv run pytest --version` both succeed.
 
-- [ ] **Step 2: Write `test_homepage_toolkit_cards_match_manifests`**
+- [x] **Step 2: Write `test_homepage_toolkit_cards_match_manifests`**
 
 Parse all six image manifests with PyYAML, follow each `haibox/<base>` reference for inherited tools, then parse homepage cards. Assert the card names equal the manifest names, each displayed tag is present in the image's direct or inherited tool set, and badge class/text matches `active` or `experimental` status.
 
-- [ ] **Step 3: Write `test_homepage_icons_use_local_svg_sprite`**
+- [x] **Step 3: Write `test_homepage_icons_use_local_svg_sprite`**
 
 Assert `docs/index.md` has no `{% include` expression, every `<use>` references a symbol ID declared in `docs/assets/icons.svg`, and the page contains a rendered SVG element for each icon-bearing feature, toolkit, Quick Start card, warning, and documentation link.
 
-- [ ] **Step 4: Run the new tests and confirm they fail for the expected current defects**
+- [x] **Step 4: Run the new tests and confirm they fail for the expected current defects**
 
 Run: `uv run pytest tests/unit/test_docs_site.py -q`
 
 Expected: FAIL because the current page contains raw Jinja, mismatched tool tags, and lacks the new SVG sprite contract.
 
-- [ ] **Step 5: Commit the regression tests while they are red**
+- [x] **Step 5: Commit the regression tests while they are red**
 
 ```bash
 git add tests/unit/test_docs_site.py
 git commit -m "test: cover HAIBOX website content accuracy"
 ```
 
-- [ ] **Step 6: Add the local SVG symbol sprite**
+- [x] **Step 6: Add the local SVG symbol sprite**
 
 Define the required icons with `currentColor` fills, consistent `viewBox` dimensions, and no animation or external references.
 
-- [ ] **Step 7: Replace Jinja snippets with accessible SVG references**
+- [x] **Step 7: Replace Jinja snippets with accessible SVG references**
 
 Use decorative SVGs (`aria-hidden="true"`, `focusable="false"`) and local `use` references; remove all `{% include %}` expressions from the Markdown page.
 
-- [ ] **Step 8: Add semantic manifest identifiers and correct card content**
+- [x] **Step 8: Add semantic manifest identifiers and correct card content**
 
 Remove Core `socat`; replace Network Security `tshark` and `bind9-dnsutils` with manifest tools; replace unsupported AD tools with `smbclient`, `ldapsearch`, `kinit`, and `nmap`; replace unsupported OSINT tools with `dnsrecon`, `exiftool`, `whois`, `subfinder`, and `httpx`; correct Full's selected tags. Preserve manifest status labels.
 
-- [ ] **Step 9: Run the regression tests and confirm they pass**
+- [x] **Step 9: Run the regression tests and confirm they pass**
 
 Run: `uv run pytest tests/unit/test_docs_site.py -q`
 
 Expected: PASS for six cards, all displayed tools and statuses, and every local icon symbol.
 
-- [ ] **Step 10: Commit the icon and toolkit correction**
+- [x] **Step 10: Commit the icon and toolkit correction**
 
 ```bash
 git add docs/index.md docs/assets/icons.svg
@@ -118,6 +118,7 @@ git commit -m "fix: render homepage icons and correct toolkit details"
 **Files:**
 - Create: `overrides/partials/footer.html`
 - Modify: `mkdocs.yml`
+- Modify: `docs/index.md` (repair two raw HTML links to published URLs)
 - Modify: `docs/stylesheets/extra.css`
 
 **Interfaces:**
@@ -125,31 +126,31 @@ git commit -m "fix: render homepage icons and correct toolkit details"
 - The footer links to the User Guide, homepage toolkit section, Threat Model, repository, and repository MIT license.
 - `copyright` is the source for the footer bottom line; `extra.generator: false` suppresses the stock generator label.
 
-- [ ] **Step 1: Write navigation and footer regression tests**
+- [x] **Step 1: Write navigation and footer regression tests**
 
-Add `test_navigation_uses_five_groups_without_dropping_documents` to assert the five requested top-level labels, that every current navigable Markdown page is listed, and each listed source path exists. Add `test_footer_has_branded_links_and_copyright` to assert the five labeled footer links, config-based copyright, custom theme directory, and disabled generator notice.
+Add `test_navigation_uses_five_groups_without_dropping_documents` to assert the five requested top-level labels, that every current user-facing Markdown page is listed, and each listed source path exists. Exclude the root README and internal `docs/superpowers/` planning records from that public page inventory. Add `test_footer_has_branded_links_and_copyright` to assert the five labeled footer links, normalized `base_url` paths, config-based copyright, custom theme directory, and disabled generator notice. Check homepage raw HTML links use published URLs rather than `.md` source paths.
 
-- [ ] **Step 2: Run the new tests and confirm they fail for the current navigation/footer**
+- [x] **Step 2: Run the new tests and confirm they fail for the current navigation/footer**
 
 Run: `uv run pytest tests/unit/test_docs_site.py -q`
 
 Expected: FAIL because current navigation has many top-level pages and no branded footer override.
 
-- [ ] **Step 3: Reorganize the `nav` tree into the five requested categories**
+- [x] **Step 3: Reorganize the `nav` tree into the five requested categories**
 
-Keep all current page paths and group detailed architecture, threat model, validation, verification, reports, runbooks, and ADRs under the appropriate category.
+Keep all current user-facing page paths and group detailed architecture, threat model, validation, verification, reports, runbooks, and ADRs under the appropriate category. Exclude the new internal `docs/superpowers/` planning records with MkDocs `exclude_docs` so they remain in the repository without becoming public site pages.
 
-- [ ] **Step 4: Configure and create the minimal footer override**
+- [x] **Step 4: Configure and create the minimal footer override**
 
 Set HAIBOX copyright text, disable the generator notice, set `theme.custom_dir: overrides`, and create an accessible branded footer with the tagline and five labeled links. Use `base_url` for local links and `repo_url` for repository links.
 
-- [ ] **Step 5: Add responsive footer styling in the existing stylesheet**
+- [x] **Step 5: Add responsive footer styling in the existing stylesheet**
 
 Use the current navy and mint palette, clear focus states, readable contrast, a compact mobile stack, and no animation.
 
-- [ ] **Step 6: Build strictly and inspect representative output pages**
+- [x] **Step 6: Build strictly and inspect representative output pages**
 
-Run: `uv run mkdocs build --strict`
+Run: `uv run mkdocs build --strict`; inspect generated links and assets across Home, User Guide, and 404 output.
 
 Expected: PASS; generated Home and User Guide pages contain the new footer; all five nav groups render; previous page URLs remain under their original paths.
 

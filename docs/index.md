@@ -298,13 +298,13 @@ hide:
     <p>
       The default runner network has no external connectivity. Scope matchers check policy before execution;
       they are not a replacement for network-layer enforcement. Use HAIBOX only on systems you own or have explicit,
-      written authorization to assess. Review <a href="threat-model.md">Threat Model</a> and <a href="https://github.com/0xSSfL/haibox/blob/main/SECURITY.md" target="_blank" rel="noopener">SECURITY.md</a>.
+      written authorization to assess. Review <a href="threat-model/">Threat Model</a> and <a href="https://github.com/0xSSfL/haibox/blob/main/SECURITY.md" target="_blank" rel="noopener">SECURITY.md</a>.
     </p>
   </div>
 </div>
 
 <div style="text-align: center; margin: 3rem 0 2rem;">
-  <a href="user-guide.md" class="btn-primary" style="font-size: 1.05rem; padding: 0.85rem 2.2rem;">
+  <a href="user-guide/" class="btn-primary" style="font-size: 1.05rem; padding: 0.85rem 2.2rem;">
     <svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#documentation"></use></svg> Read the Full Documentation
   </a>
 </div>
