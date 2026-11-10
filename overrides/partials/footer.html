@@ -1,0 +1,23 @@
+<footer class="md-footer hb-footer">
+  <div class="hb-footer__main md-grid">
+    <a class="hb-footer__brand" href="{{ base_url.rstrip('/') }}/" aria-label="HAIBOX home">
+      <img src="{{ base_url.rstrip('/') }}/assets/haibox-mark.png" width="40" height="40" alt="">
+      <span class="hb-footer__brand-copy">
+        <strong>HAIBOX</strong>
+        <span class="hb-footer__tagline">Your pentest lab. In a box.</span>
+      </span>
+    </a>
+    <nav class="hb-footer__nav" aria-label="Footer">
+      <ul>
+        <li><a href="{{ base_url.rstrip('/') }}/user-guide/">Documentation</a></li>
+        <li><a href="{{ base_url.rstrip('/') }}/#toolkits">Toolkits</a></li>
+        <li><a href="{{ base_url.rstrip('/') }}/threat-model/">Security</a></li>
+        <li><a href="{{ config.repo_url }}" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+        <li><a href="{{ config.repo_url }}/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a></li>
+      </ul>
+    </nav>
+  </div>
+  <div class="hb-footer__bottom">
+    <div class="md-grid">{{ config.copyright }}</div>
+  </div>
+</footer>

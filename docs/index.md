@@ -58,25 +58,24 @@ hide:
         </div>
         <div class="hb-terminal-foot">Offline by default &middot; illustrative demo &middot; no commands executed</div>
       </div>
-      <div class="hb-visual-controls"><button class="hb-motion-toggle" type="button" aria-pressed="false" hidden>Pause animation</button></div>
     </div>
   </div>
-  <div class="hb-landing-alpha"><span aria-hidden="true">&#9888;</span><span><strong>Alpha release.</strong> External target routing and VPN/AI integration are unfinished, and image dependency scans still contain HIGH/CRITICAL findings. <a href="verification-status/">View verification status</a>.</span></div>
+  <div class="hb-landing-alpha"><span aria-hidden="true">&#9888;</span><span><strong>Alpha software.</strong> External target routing, VPN routing, and the kill switch are not implemented. AI and graphical workstation features are not implemented, and image scans retain unresolved HIGH/CRITICAL findings. <a href="verification-status/">View verification status</a>.</span></div>
 </section>
 
 ---
 
 <div class="section-header" id="features">
   <div class="section-tag">Security Architecture</div>
-  <h2 class="section-title">Built for Isolation. Verified by Default.</h2>
-  <p class="section-desc">HAIBOX enforces strict trust boundaries between your host, tool runners, and target networks.</p>
+  <h2 class="section-title">Designed for Isolation. Scoped Access Is Experimental.</h2>
+  <p class="section-desc">HAIBOX separates host data and applies deny-by-default runner profiles. Scope matchers do not yet enforce every network path.</p>
 </div>
 
 <div class="feature-grid">
 
   <div class="feature-card">
     <div class="feature-icon-wrapper">
-      <span class="twemoji">{% include ".icons/material/shield-lock-outline.svg" %}</span>
+      <svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#security-shield"></use></svg>
     </div>
     <h3>Deny-by-Default Runners</h3>
     <p>Non-root user (UID 65534), read-only root filesystem, dropped capabilities, no privileged mode, and no Docker socket pass-through.</p>
@@ -84,7 +83,7 @@ hide:
 
   <div class="feature-card">
     <div class="feature-icon-wrapper">
-      <span class="twemoji">{% include ".icons/material/folder-lock.svg" %}</span>
+      <svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#security-folder"></use></svg>
     </div>
     <h3>Host-Only Data Boundary</h3>
     <p>Secrets, evidence, reports, and audit logs live exclusively on the host. Only <code>workspace/</code> is mounted writable inside the runner.</p>
@@ -92,7 +91,7 @@ hide:
 
   <div class="feature-card">
     <div class="feature-icon-wrapper">
-      <span class="twemoji">{% include ".icons/material/file-certificate.svg" %}</span>
+      <svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#security-audit"></use></svg>
     </div>
     <h3>Tamper-Evident Audit Trail</h3>
     <p>Every container lifecycle event, shell session, and command execution is logged to a hash-chained SHA-256 host ledger with instant verification.</p>
@@ -100,10 +99,10 @@ hide:
 
   <div class="feature-card">
     <div class="feature-icon-wrapper">
-      <span class="twemoji">{% include ".icons/material/lan.svg" %}</span>
+      <svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#security-network"></use></svg>
     </div>
     <h3>Isolated Network Default</h3>
-    <p>Default engagements run on Docker isolated gateway mode. Zero external connectivity, preventing accidental packet leakage to LAN or internet.</p>
+    <p>Default engagements use Docker isolated gateway mode and have no external connectivity to the LAN or internet.</p>
   </div>
 
 </div>
@@ -119,10 +118,10 @@ hide:
 <div class="toolkit-grid">
 
   <!-- Core -->
-  <div class="toolkit-card">
+  <article class="toolkit-card" data-image="core">
     <div class="toolkit-card-header">
       <div class="toolkit-icon-title">
-        <div class="toolkit-icon"><span class="twemoji">{% include ".icons/material/console.svg" %}</span></div>
+        <div class="toolkit-icon"><svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#toolkit-core"></use></svg></div>
         <h3>core</h3>
       </div>
       <span class="toolkit-badge badge-active">Active</span>
@@ -133,18 +132,18 @@ hide:
       <span class="toolkit-tag">bash</span>
       <span class="toolkit-tag">curl</span>
       <span class="toolkit-tag">netcat</span>
-      <span class="toolkit-tag">socat</span>
+      <span class="toolkit-tag">git</span>
       <span class="toolkit-tag">jq</span>
       <span class="toolkit-tag">file</span>
     </div>
     <div class="toolkit-code">haibox image build core</div>
-  </div>
+  </article>
 
   <!-- Web Security -->
-  <div class="toolkit-card">
+  <article class="toolkit-card" data-image="web-security">
     <div class="toolkit-card-header">
       <div class="toolkit-icon-title">
-        <div class="toolkit-icon"><span class="twemoji">{% include ".icons/material/web.svg" %}</span></div>
+        <div class="toolkit-icon"><svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#toolkit-web"></use></svg></div>
         <h3>web-security</h3>
       </div>
       <span class="toolkit-badge badge-active">Active</span>
@@ -161,13 +160,13 @@ hide:
       <span class="toolkit-tag">httpx</span>
     </div>
     <div class="toolkit-code">haibox image build web-security</div>
-  </div>
+  </article>
 
   <!-- Network Security -->
-  <div class="toolkit-card">
+  <article class="toolkit-card" data-image="network-security">
     <div class="toolkit-card-header">
       <div class="toolkit-icon-title">
-        <div class="toolkit-icon"><span class="twemoji">{% include ".icons/material/radar.svg" %}</span></div>
+        <div class="toolkit-icon"><svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#toolkit-network"></use></svg></div>
         <h3>network-security</h3>
       </div>
       <span class="toolkit-badge badge-active">Active</span>
@@ -176,19 +175,19 @@ hide:
     <div class="toolkit-tools-label">Included Tools</div>
     <div class="toolkit-tags">
       <span class="toolkit-tag">tcpdump</span>
-      <span class="toolkit-tag">tshark</span>
+      <span class="toolkit-tag">socat</span>
       <span class="toolkit-tag">nmap</span>
       <span class="toolkit-tag">masscan</span>
-      <span class="toolkit-tag">bind9-dnsutils</span>
+      <span class="toolkit-tag">kdig</span>
     </div>
     <div class="toolkit-code">haibox image build network-security</div>
-  </div>
+  </article>
 
   <!-- AD Security -->
-  <div class="toolkit-card">
+  <article class="toolkit-card" data-image="ad-security">
     <div class="toolkit-card-header">
       <div class="toolkit-icon-title">
-        <div class="toolkit-icon"><span class="twemoji">{% include ".icons/material/domain.svg" %}</span></div>
+        <div class="toolkit-icon"><svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#toolkit-ad"></use></svg></div>
         <h3>ad-security</h3>
       </div>
       <span class="toolkit-badge badge-exp">Experimental</span>
@@ -196,19 +195,20 @@ hide:
     <div class="toolkit-desc">Authorized Active Directory assessment, Kerberos authentication triage, and attack-path enumeration.</div>
     <div class="toolkit-tools-label">Included Tools</div>
     <div class="toolkit-tags">
-      <span class="toolkit-tag">bloodhound-python</span>
+      <span class="toolkit-tag">smbclient</span>
       <span class="toolkit-tag">impacket</span>
-      <span class="toolkit-tag">kerbrute</span>
-      <span class="toolkit-tag">netexec</span>
+      <span class="toolkit-tag">ldapsearch</span>
+      <span class="toolkit-tag">kinit</span>
+      <span class="toolkit-tag">nmap</span>
     </div>
     <div class="toolkit-code">haibox image build ad-security</div>
-  </div>
+  </article>
 
   <!-- OSINT -->
-  <div class="toolkit-card">
+  <article class="toolkit-card" data-image="osint">
     <div class="toolkit-card-header">
       <div class="toolkit-icon-title">
-        <div class="toolkit-icon"><span class="twemoji">{% include ".icons/material/eye-outline.svg" %}</span></div>
+        <div class="toolkit-icon"><svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#toolkit-osint"></use></svg></div>
         <h3>osint</h3>
       </div>
       <span class="toolkit-badge badge-exp">Experimental</span>
@@ -216,20 +216,20 @@ hide:
     <div class="toolkit-desc">Public intelligence gathering, domain reconnaissance, metadata harvesting, and email enumeration.</div>
     <div class="toolkit-tools-label">Included Tools</div>
     <div class="toolkit-tags">
-      <span class="toolkit-tag">theHarvester</span>
-      <span class="toolkit-tag">sherlock</span>
-      <span class="toolkit-tag">sublist3r</span>
       <span class="toolkit-tag">dnsrecon</span>
-      <span class="toolkit-tag">photon</span>
+      <span class="toolkit-tag">exiftool</span>
+      <span class="toolkit-tag">whois</span>
+      <span class="toolkit-tag">subfinder</span>
+      <span class="toolkit-tag">httpx</span>
     </div>
     <div class="toolkit-code">haibox image build osint</div>
-  </div>
+  </article>
 
   <!-- Full -->
-  <div class="toolkit-card">
+  <article class="toolkit-card" data-image="full">
     <div class="toolkit-card-header">
       <div class="toolkit-icon-title">
-        <div class="toolkit-icon"><span class="twemoji">{% include ".icons/material/toolbox-outline.svg" %}</span></div>
+        <div class="toolkit-icon"><svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#toolkit-full"></use></svg></div>
         <h3>full</h3>
       </div>
       <span class="toolkit-badge badge-exp">Experimental</span>
@@ -237,14 +237,15 @@ hide:
     <div class="toolkit-desc">Comprehensive toolkit bundling Web, Network, Active Directory, and OSINT capabilities into one image.</div>
     <div class="toolkit-tools-label">Included Tools</div>
     <div class="toolkit-tags">
-      <span class="toolkit-tag">all toolkits</span>
       <span class="toolkit-tag">nuclei</span>
       <span class="toolkit-tag">impacket</span>
-      <span class="toolkit-tag">tshark</span>
+      <span class="toolkit-tag">socat</span>
+      <span class="toolkit-tag">dnsrecon</span>
+      <span class="toolkit-tag">exiftool</span>
       <span class="toolkit-tag">ffuf</span>
     </div>
     <div class="toolkit-code">haibox image build full</div>
-  </div>
+  </article>
 
 </div>
 
@@ -253,56 +254,82 @@ hide:
 <div class="section-header" id="quickstart">
   <div class="section-tag">Quick Start</div>
   <h2 class="section-title">Up and Running in 3 Steps</h2>
-  <p class="section-desc">Get your isolated penetration testing environment initialized in minutes.</p>
+  <p class="section-desc">Install HAIBOX, configure Docker, then start an offline demo.</p>
 </div>
 
-<div class="feature-grid">
+<div class="quickstart-grid">
 
-  <div class="feature-card">
+  <div class="feature-card quickstart-card" markdown="1">
     <div class="feature-icon-wrapper">
-      <span class="twemoji">{% include ".icons/material/numeric-1-box-outline.svg" %}</span>
+      <svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#quick-start-install"></use></svg>
     </div>
     <h3>1. Install HAIBOX</h3>
-    <p>Install via the verified release script using <code>uv tool install</code>:</p>
-    <div class="toolkit-code" style="margin-top: 0.8rem;">curl -fsSL https://0xssfl.github.io/haibox/install.sh | bash</div>
+    <p>The installer checks the release checksum and installs the CLI with <code>uv tool install</code>.</p>
+
+```bash
+curl -fsSL \
+  https://0xssfl.github.io/haibox/install.sh \
+  | bash
+```
+
+    <p class="hb-quickstart-link"><a href="user-guide/">Review installation requirements</a></p>
   </div>
 
-  <div class="feature-card">
+  <div class="feature-card quickstart-card" markdown="1">
     <div class="feature-icon-wrapper">
-      <span class="twemoji">{% include ".icons/material/numeric-2-box-outline.svg" %}</span>
+      <svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#quick-start-docker"></use></svg>
     </div>
-    <h3>2. Setup Docker Context</h3>
-    <p>Create the client-side context and verify host prerequisites:</p>
-    <div class="toolkit-code" style="margin-top: 0.8rem;">docker context create haibox --docker "host=unix:///var/run/docker.sock" && haibox init && haibox doctor</div>
+    <h3>2. Configure Docker</h3>
+    <p>Create the client-side context, initialize HAIBOX, and check host prerequisites:</p>
+
+```bash
+docker context create haibox \
+  --docker "host=unix:///var/run/docker.sock"
+haibox init
+haibox doctor
+```
+
+    <p class="hb-quickstart-link"><a href="user-guide/">Read the Docker setup notes</a></p>
   </div>
 
-  <div class="feature-card">
+  <div class="feature-card quickstart-card" markdown="1">
     <div class="feature-icon-wrapper">
-      <span class="twemoji">{% include ".icons/material/numeric-3-box-outline.svg" %}</span>
+      <svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#quick-start-engagement"></use></svg>
     </div>
-    <h3>3. Launch an Engagement</h3>
-    <p>Initialize a workspace and open an interactive isolated shell:</p>
-    <div class="toolkit-code" style="margin-top: 0.8rem;">haibox engagement init demo --profile web-security --allow-empty-scope && haibox shell</div>
+    <h3>3. Launch an Offline Demo</h3>
+    <p>Build a toolkit, create an empty-scope demo, and open its shell:</p>
+
+```bash
+haibox image build web-security
+haibox engagement init demo \
+  --name "Offline demo" \
+  --profile web-security \
+  --allow-empty-scope
+haibox run -- nmap --version
+haibox shell
+```
+
+    <p class="hb-quickstart-link"><a href="user-guide/">Read the engagement and scope guide</a></p>
   </div>
 
 </div>
 
-<div class="security-banner">
+<div class="security-banner" role="note" aria-labelledby="security-notice-title">
   <div class="security-banner-icon">
-    <span class="twemoji">{% include ".icons/material/alert-octagon.svg" %}</span>
+    <svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#warning"></use></svg>
   </div>
   <div class="security-banner-content">
-    <h4>Alpha Software Notice & Security Boundaries</h4>
-    <p>
-      The default runner network has no external connectivity. Scope matchers check policy before execution;
-      they are not a replacement for network-layer enforcement. Use HAIBOX only on systems you own or have explicit,
-      written authorization to assess. Review <a href="threat-model.md">Threat Model</a> and <a href="https://github.com/0xSSfL/haibox/blob/main/SECURITY.md" target="_blank" rel="noopener">SECURITY.md</a>.
-    </p>
+    <h4 id="security-notice-title">Alpha software: current limits</h4>
+    <ul class="security-banner-list">
+      <li><strong>Image risk:</strong> dependency scans retain unresolved HIGH/CRITICAL findings.</li>
+      <li><strong>Default network:</strong> runners have no external connectivity.</li>
+      <li><strong>Scoped profile:</strong> experimental forward-path prototype; host services and Docker's embedded DNS are not covered, and negative integration tests are incomplete.</li>
+      <li><strong>VPN:</strong> runner routing and the kill switch are not implemented.</li>
+      <li><strong>AI:</strong> AI features are not implemented.</li>
+      <li><strong>Graphical workstation:</strong> graphical workstation features are not implemented.</li>
+    </ul>
+    <p>Use HAIBOX only on systems you own or have explicit, written authorization to assess. Review the <a href="threat-model/">Threat Model</a> and <a href="https://github.com/0xSSfL/haibox/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer">Security Policy</a>.</p>
   </div>
 </div>
 
-<div style="text-align: center; margin: 3rem 0 2rem;">
-  <a href="user-guide.md" class="btn-primary" style="font-size: 1.05rem; padding: 0.85rem 2.2rem;">
-    <span class="twemoji">{% include ".icons/material/book-open-page-variant.svg" %}</span> Read the Full Documentation
-  </a>
-</div>
+<p class="hb-documentation-cta"><svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#documentation"></use></svg> <a href="user-guide/">Continue to the HAIBOX User Guide <span aria-hidden="true">&#8594;</span></a></p>
