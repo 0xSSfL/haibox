@@ -10,11 +10,14 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 from haibox.errors import ValidationError
 from haibox.models import ALLOWED_CAPABILITIES, FORBIDDEN_ENV_KEYS, Engagement
 from haibox.paths import Paths
 from haibox.runtime.base import labels_for
+
+NetworkMode = Literal["isolated", "none", "scoped"]
 
 _NAME_RE = re.compile(r"^haibox-[a-z0-9][a-z0-9-]{0,61}$")
 _NETWORK_RE = re.compile(r"^(haibox-[a-z0-9][a-z0-9-]{0,61}|none)$")
@@ -38,6 +41,7 @@ class ContainerSpec:
     capabilities: list[str] = field(default_factory=list)
     environment: dict[str, str] = field(default_factory=dict)
     labels: dict[str, str] = field(default_factory=dict)
+    network_profile: NetworkMode = "isolated"
     hostname: str = ""
     sleep_command: tuple[str, ...] = ("/bin/sh", "-c", "exec sleep infinity")
 
@@ -56,6 +60,8 @@ class ContainerSpec:
             raise ValidationError("memory must look like '512m' or '4g'")
         if not 16 <= self.pids_limit <= 4096:
             raise ValidationError("pids_limit must be between 16 and 4096")
+        if self.network_profile not in ("isolated", "none", "scoped"):
+            raise ValidationError(f"invalid network profile: {self.network_profile!r}")
         unknown = sorted(set(self.capabilities) - ALLOWED_CAPABILITIES)
         if unknown:
             raise ValidationError(f"capabilities not allowed: {', '.join(unknown)}")
@@ -103,6 +109,7 @@ class ContainerSpec:
             capabilities=list(runtime.capabilities),
             environment=dict(runtime.environment),
             labels=labels_for(engagement.id, engagement.profile, engagement.image),
+            network_profile=runtime.network_mode,
         )
 
     def to_create_args(self) -> list[str]:

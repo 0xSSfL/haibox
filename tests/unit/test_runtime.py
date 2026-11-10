@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from typing import Any
 
@@ -220,12 +221,16 @@ def _network_payload(
     managed: bool = True,
     gateway_mode: str | None = "isolated",
     gateway: str | None = None,
+    network_profile: str | None = None,
+    network_id: str = "network-id",
 ) -> str:
     labels: dict[str, str] = {}
     if managed:
         labels["haibox.managed"] = "true"
     if engagement_id:
         labels["haibox.engagement"] = engagement_id
+    if network_profile:
+        labels["haibox.network-profile"] = network_profile
     options: dict[str, str] = {}
     if gateway_mode:
         options["com.docker.network.bridge.gateway_mode_ipv4"] = gateway_mode
@@ -235,7 +240,7 @@ def _network_payload(
         ipam["Config"] = [{"Subnet": "172.19.0.0/16", "Gateway": gateway}]
     return json.dumps(
         {
-            "Id": "network-id",
+            "Id": network_id,
             "Name": name,
             "Driver": "bridge",
             "Internal": internal,
@@ -397,6 +402,167 @@ def test_network_exists_handles_none() -> None:
     cli, runner = _cli(lambda args, kwargs: process_fail("unexpected"))
     assert cli.network_exists("none")
     assert runner.calls == []
+
+
+def test_network_create_uses_the_requested_profile_over_global_config() -> None:
+    created = False
+
+    def handler(args: list[str], kwargs: dict[str, Any]):
+        nonlocal created
+        del kwargs
+        if "network" in args and "inspect" in args:
+            return (
+                process_ok(_network_payload(network_profile="scoped", internal=False))
+                if created
+                else process_fail("not found")
+            )
+        if "network" in args and "create" in args:
+            created = True
+            return process_ok()
+        return process_fail("unexpected")
+
+    # Global config says isolated; the engagement asks for scoped.
+    cli, runner = _cli(handler, network_profile="isolated")
+    cli.network_create("haibox-demo-net", "demo", network_profile="scoped")
+    create = next(call for call in runner.calls if "network" in call and "create" in call)
+    assert "--internal" not in create
+    assert "haibox.network-profile=scoped" in create
+    assert "com.docker.network.bridge.gateway_mode_ipv4=isolated" not in create
+
+
+def test_create_container_uses_the_spec_profile_not_global_config(
+    spec: ContainerSpec,
+) -> None:
+    scoped_spec = dataclasses.replace(spec, network_profile="scoped")
+    created = False
+    network_created = False
+    payload = _payload(scoped_spec)
+
+    def handler(args: list[str], kwargs: dict[str, Any]):
+        nonlocal created, network_created
+        del kwargs
+        if args and args[0] == "nft":
+            return process_ok()
+        if "network" in args and "inspect" in args:
+            if not network_created:
+                return process_fail("not found")
+            return process_ok(
+                _network_payload(network_profile="scoped", internal=False)
+            )
+        if "network" in args and "create" in args:
+            network_created = True
+            return process_ok()
+        if "inspect" in args:
+            if not created:
+                return process_fail("not found")
+            return process_ok(json.dumps(payload))
+        if "create" in args:
+            created = True
+            return process_ok("container-id\n")
+        return process_fail("unexpected")
+
+    # Global config says isolated; the engagement snapshot says scoped.
+    cli, runner = _cli(handler, network_profile="isolated")
+    assert cli.create_container(scoped_spec) == "container-id"
+    network_create = next(
+        call for call in runner.calls if "network" in call and "create" in call
+    )
+    assert "haibox.network-profile=scoped" in network_create
+    assert "--internal" not in network_create
+    assert any(call[:2] == ["nft", "-f"] for call in runner.calls)
+
+
+def test_scoped_container_fails_closed_without_a_bridge(spec: ContainerSpec) -> None:
+    scoped_spec = dataclasses.replace(spec, network_profile="scoped")
+    network_created = False
+
+    def handler(args: list[str], kwargs: dict[str, Any]):
+        nonlocal network_created
+        del kwargs
+        if args and args[0] == "nft":
+            return process_ok()
+        if "network" in args and "inspect" in args:
+            if not network_created:
+                return process_fail("not found")
+            return process_ok(
+                _network_payload(
+                    network_profile="scoped", internal=False, network_id=""
+                )
+            )
+        if "network" in args and "create" in args:
+            network_created = True
+            return process_ok()
+        if "inspect" in args:
+            return process_fail("not found")
+        return process_fail("unexpected")
+
+    cli, runner = _cli(handler, network_profile="scoped")
+    with pytest.raises(ContainerError, match="does not expose a bridge interface"):
+        cli.create_container(scoped_spec)
+    assert not any(
+        "create" in call and "--read-only" in call for call in runner.calls
+    )
+
+
+def test_network_remove_cleans_up_scoped_policy_before_the_network() -> None:
+    def handler(args: list[str], kwargs: dict[str, Any]):
+        del kwargs
+        if args and args[0] == "nft":
+            return process_ok()
+        if "network" in args and "inspect" in args:
+            return process_ok(
+                _network_payload(network_profile="scoped", internal=False)
+            )
+        if "network" in args and "rm" in args:
+            return process_ok()
+        return process_fail("unexpected")
+
+    cli, runner = _cli(handler, network_profile="isolated")
+    cli.network_remove("haibox-demo-net")
+    nft_index = next(
+        index for index, call in enumerate(runner.calls) if call and call[0] == "nft"
+    )
+    rm_index = next(
+        index
+        for index, call in enumerate(runner.calls)
+        if "network" in call and "rm" in call
+    )
+    assert nft_index < rm_index
+
+
+def test_network_remove_propagates_policy_cleanup_failure() -> None:
+    def handler(args: list[str], kwargs: dict[str, Any]):
+        del kwargs
+        if args and args[0] == "nft":
+            return process_fail("permission denied")
+        if "network" in args and "inspect" in args:
+            return process_ok(
+                _network_payload(network_profile="scoped", internal=False)
+            )
+        if "network" in args and "rm" in args:
+            return process_ok()
+        return process_fail("unexpected")
+
+    cli, runner = _cli(handler, network_profile="isolated")
+    with pytest.raises(RuntimeFailure, match="permission denied"):
+        cli.network_remove("haibox-demo-net")
+    assert not any("network" in call and "rm" in call for call in runner.calls)
+
+
+def test_network_remove_skips_policy_for_an_isolated_network() -> None:
+    def handler(args: list[str], kwargs: dict[str, Any]):
+        del kwargs
+        if args and args[0] == "nft":
+            return process_fail("nft should not be called")
+        if "network" in args and "inspect" in args:
+            return process_ok(_network_payload(network_profile="isolated"))
+        if "network" in args and "rm" in args:
+            return process_ok()
+        return process_fail("unexpected")
+
+    cli, runner = _cli(handler, network_profile="isolated")
+    cli.network_remove("haibox-demo-net")
+    assert not any(call and call[0] == "nft" for call in runner.calls)
 
 
 def test_create_container_verifies_the_security_shape(spec: ContainerSpec) -> None:

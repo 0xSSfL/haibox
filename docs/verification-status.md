@@ -52,7 +52,7 @@ as working until the corresponding row has a recorded result.
 | Full image | Built and verified; experimental combined profile |
 | Dependency-aware image builds | Implemented; `depends_on` builds local bases in order and rejects cycles |
 | Network-layer nftables policy generator | Implemented; unit tests pass (ruleset generation, exclusions precedence, always-drop, apply/remove) |
-| nftables runtime wiring (`scoped` profile) | Partially implemented in `DockerCli`: policy applied on container create and removed with the network. Unit-tested only through the generator; no runtime/integration test yet. Known gaps: host input path, DNS, hostname entries, policy re-apply, and config/profile mismatch (see M2 in `roadmap.md`) |
+| nftables runtime wiring (`scoped` profile) | Implemented in `DockerCli`: policy applied on container create, flushed and replaced on re-apply, removed before network deletion, cleanup errors propagate, a missing bridge aborts creation, and the profile comes from the engagement snapshot. Unit-tested with the scripted runner. Still prototype-level: no negative integration test, host input path and Docker embedded DNS uncovered, hostname entries advisory, and the policy gateway is not implemented (see M2 in `roadmap.md`) |
 | VPN profile store and gateway lifecycle | Implemented; gateway image not built |
 | Transparent VPN routing and kill switch | Not implemented |
 | Restricted Docker broker + AI adapter | Not implemented |

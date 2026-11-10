@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from haibox.errors import ContainerError, RuntimeFailure
-from haibox.models import Scope
+from haibox.models import NetworkProfile, Scope
 from haibox.runtime.base import ContainerInfo, ExecResult, ImageInfo
 from haibox.runtime.process import ProcessResult
 from haibox.runtime.spec import ContainerSpec
@@ -52,16 +52,23 @@ class FakeRuntime:
         return self.server_version
 
     # ---------------------------------------------------------------- networks
-    def network_create(self, name: str, engagement_id: str) -> None:
-        self._record("network_create", name, engagement_id)
+    def network_create(
+        self,
+        name: str,
+        engagement_id: str,
+        network_profile: NetworkProfile | None = None,
+    ) -> None:
+        self._record("network_create", name, engagement_id, network_profile)
         self.networks.setdefault(name, engagement_id)
 
     def network_exists(self, name: str) -> bool:
         self._record("network_exists", name)
         return name == "none" or name in self.networks or name in self.vpn_networks
 
-    def network_remove(self, name: str) -> None:
-        self._record("network_remove", name)
+    def network_remove(
+        self, name: str, network_profile: NetworkProfile | None = None
+    ) -> None:
+        self._record("network_remove", name, network_profile)
         if name not in self.networks:
             raise ContainerError(f"network not found: {name}")
         del self.networks[name]
