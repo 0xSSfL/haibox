@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg">
+  <symbol id="security-shield" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+      <path d="M12 2.5 4.5 5.6v5.2c0 4.8 3 8.8 7.5 10.7 4.5-1.9 7.5-5.9 7.5-10.7V5.6L12 2.5Z"/>
+      <rect x="9" y="10.5" width="6" height="5.5" rx="1"/>
+      <path d="M10.5 10.5V9a1.5 1.5 0 0 1 3 0v1.5m-1.5 2v1.5"/>
+    </g>
+  </symbol>
+  <symbol id="security-folder" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+      <path d="M3.5 7.5h6l2 2h9v8.7a1.8 1.8 0 0 1-1.8 1.8H5.3a1.8 1.8 0 0 1-1.8-1.8V7.5Z"/>
+      <path d="M3.5 7.5V5.8A1.8 1.8 0 0 1 5.3 4h4l2 2h4.2"/>
+      <rect x="10" y="12" width="5.5" height="4.8" rx=".8"/>
+      <path d="M11.3 12v-1a1.45 1.45 0 0 1 2.9 0v1m-1.45 2v1"/>
+    </g>
+  </symbol>
+  <symbol id="security-audit" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+      <path d="m12 2.5 2.4 1.3 2.7.2 1.1 2.5 1.8 2-1 2.5.2 2.7-2.4 1.3-1.7 2.1-2.7-.4-2.7.4L8 15l-2.4-1.3.2-2.7-1-2.5 1.8-2 1.1-2.5 2.7-.2L12 2.5Z"/>
+      <path d="m9 10.9 2 2 4-4.2"/>
+      <path d="m9.2 16.9-1.1 4 3.9-2.1m2.8-1.9 1.1 4-3.9-2.1"/>
+    </g>
+  </symbol>
+  <symbol id="security-network" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+      <rect x="9" y="3" width="6" height="5" rx="1"/>
+      <rect x="3" y="16" width="6" height="5" rx="1"/>
+      <rect x="15" y="16" width="6" height="5" rx="1"/>
+      <path d="M12 8v4m-6 4v-2h12v2m-6-4H6"/>
+    </g>
+  </symbol>
+  <symbol id="toolkit-core" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+      <rect x="3" y="4.5" width="18" height="15" rx="2"/>
+      <path d="m7 9 3 3-3 3m6 0h4"/>
+    </g>
+  </symbol>
+  <symbol id="toolkit-web" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+      <circle cx="12" cy="12" r="8.8"/>
+      <path d="M3.7 9h16.6M3.7 15h16.6M12 3.2c2.1 2.3 3.2 5.2 3.2 8.8s-1.1 6.5-3.2 8.8C9.9 18.5 8.8 15.6 8.8 12s1.1-6.5 3.2-8.8Z"/>
+    </g>
+  </symbol>
+  <symbol id="toolkit-network" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+      <circle cx="12" cy="12" r="9"/>
+      <path d="M12 3v9l6.4-6.4M5.6 18.4 12 12m0 0h9M12 12v9"/>
+      <circle cx="12" cy="12" r="1.1"/>
+    </g>
+  </symbol>
+  <symbol id="toolkit-ad" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+      <path d="M4 20.5V5.2L12 3l8 2.2v15.3H4Z"/>
+      <path d="M8 8h1m6 0h1M8 12h1m6 0h1M8 16h1m6 0h1m-4.5 4.5V16"/>
+    </g>
+  </symbol>
+  <symbol id="toolkit-osint" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+      <path d="M2.8 12s3.3-6 9.2-6 9.2 6 9.2 6-3.3 6-9.2 6-9.2-6-9.2-6Z"/>
+      <circle cx="12" cy="12" r="2.7"/>
+      <circle cx="12" cy="12" r=".6" fill="currentColor" stroke="none"/>
+    </g>
+  </symbol>
+  <symbol id="toolkit-full" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+      <path d="M3 8h18v12.5H3V8Zm5 0V5.5A1.5 1.5 0 0 1 9.5 4h5A1.5 1.5 0 0 1 16 5.5V8"/>
+      <path d="M3 12h18m-11 0v2h4v-2"/>
+    </g>
+  </symbol>
+  <symbol id="quick-start-install" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+      <rect x="3.5" y="3.5" width="17" height="17" rx="3"/>
+      <path d="m10 8 2-1.5V17m-2.5 0h5"/>
+    </g>
+  </symbol>
+  <symbol id="quick-start-docker" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+      <rect x="3.5" y="3.5" width="17" height="17" rx="3"/>
+      <path d="M9.2 8.5a2.2 2.2 0 1 1 4 1.3L9 15.3h5.5m-2.1-4.9a2.2 2.2 0 1 1 2.5 3.4"/>
+    </g>
+  </symbol>
+  <symbol id="quick-start-engagement" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+      <rect x="3.5" y="3.5" width="17" height="17" rx="3"/>
+      <path d="M9.5 8h3.8a2 2 0 0 1 0 4H10m0-4v4m2.6 0a2.3 2.3 0 1 1-2.6 3.5"/>
+    </g>
+  </symbol>
+  <symbol id="warning" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+      <path d="m8.2 3.5 7.6 0 4.7 5.1v6.8l-4.7 5.1H8.2l-4.7-5.1V8.6l4.7-5.1Z"/>
+      <path d="M12 8v5m0 3.1h.01"/>
+    </g>
+  </symbol>
+  <symbol id="documentation" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+      <path d="M12 6.5c-2.4-2-5.2-2.4-8.5-1.3v13.3c3.3-1.1 6.1-.7 8.5 1.3m0-13.3c2.4-2 5.2-2.4 8.5-1.3v13.3c-3.3-1.1-6.1-.7-8.5 1.3m0-13.3v13.3"/>
+    </g>
+  </symbol>
+</svg>
