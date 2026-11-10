@@ -246,6 +246,8 @@ Run: `git diff --check`, `git status --short`, and `git diff --stat`.
 
 Expected: only the planned website, test, spec, and plan files changed; no CLI, image, runtime, or security architecture changes.
 
-- [ ] **Step 5: Push the feature branch and open a focused PR against `main`**
+- [x] **Step 5: Push the feature branch and open a focused PR against `main`**
 
 Use a Conventional Commit summary for the PR title. The body must cover behavior and rationale, affected paths, exact verification results, completed/follow-up checklist, and a link to this design record. Do not merge.
+
+Opened [PR #7](https://github.com/0xSSfL/haibox/pull/7); it remains open and unmerged.
