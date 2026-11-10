@@ -1,0 +1,83 @@
+site_name: HAIBOX
+site_description: An isolation-first, manual-first penetration testing platform.
+site_url: https://0xssfl.github.io/haibox/
+repo_url: https://github.com/0xSSfL/haibox
+repo_name: 0xSSfL/haibox
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+site_dir: site
+exclude_docs: |
+  /README.md
+
+theme:
+  name: material
+  logo: assets/haibox-mark.png
+  favicon: assets/haibox-mark.png
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+
+extra_css:
+  - stylesheets/extra.css
+
+nav:
+  - Home: index.md
+  - User guide: user-guide.md
+  - Architecture: architecture.md
+  - Threat model: threat-model.md
+  - Image catalog: image-catalog.md
+  - Image validation: image-validation.md
+  - Vulnerability risk register: vulnerability-risk-register.md
+  - Verification status: verification-status.md
+  - Roadmap: roadmap.md
+  - Feature comparison: feature-comparison.md
+  - Host Docker review: host-docker-review.md
+  - Runbooks:
+      - KVM VM setup: runbooks/kvm-vm-setup.md
+  - ADRs:
+      - Overview: adr/README.md
+      - ADR-0001: adr/0001-dedicated-vm-and-runtime-seam.md
+      - ADR-0002: adr/0002-host-only-data-and-vault-identity.md
+      - ADR-0003: adr/0003-scope-enforcement-layers.md
+      - ADR-0004: adr/0004-defer-ai-and-vpn.md
+      - ADR-0005: adr/0005-temporary-codename.md
+      - ADR-0006: adr/0006-direct-docker-on-fedora.md
+      - ADR-0007: adr/0007-vpn-management-scope.md
+      - ADR-0008: adr/0008-engagement-network-isolation-profile.md
+      - ADR-0009: adr/0009-remove-legacy-internal-profile.md
+      - ADR-0010: adr/0010-scoped-connectivity-profile.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/0xSSfL/haibox
