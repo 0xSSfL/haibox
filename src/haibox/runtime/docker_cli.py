@@ -7,13 +7,15 @@ security shape of a container immediately after creation.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from collections.abc import Callable
 from typing import Any
 
 from haibox.errors import ContainerError, RuntimeFailure
-from haibox.models import DockerSettings, NetworkProfile
+from haibox.models import DockerSettings, NetworkProfile, Scope
+from haibox.policy.nftables import NftablesPolicy
 from haibox.runtime.base import (
     ContainerInfo,
     ExecResult,
@@ -24,6 +26,7 @@ from haibox.runtime.base import (
 from haibox.runtime.process import CommandRunner, ProcessResult, SubprocessRunner
 from haibox.runtime.spec import ContainerSpec
 from haibox.runtime.vpn_spec import VpnGatewaySpec
+from haibox.scope import load_scope
 from haibox.utils.redact import redact_args, redact_text
 
 _NAME_RE = re.compile(r"^haibox-[a-z0-9][a-z0-9-]{0,61}$")
@@ -198,21 +201,25 @@ class DockerCli:
             info = self._require_managed_network(name, engagement_id)
             self._require_network_profile(info)
             return
-        args = ["network", "create", "--driver", "bridge", "--internal"]
-        args.extend(
-            [
-                "--opt",
-                "com.docker.network.bridge.gateway_mode_ipv4=isolated",
-                "--opt",
-                "com.docker.network.bridge.gateway_mode_ipv6=isolated",
-            ]
-        )
+        args = ["network", "create", "--driver", "bridge"]
+        if self.network_profile == "isolated":
+            args.extend(
+                [
+                    "--internal",
+                    "--opt",
+                    "com.docker.network.bridge.gateway_mode_ipv4=isolated",
+                    "--opt",
+                    "com.docker.network.bridge.gateway_mode_ipv6=isolated",
+                ]
+            )
         args.extend(
             [
                 "--label",
                 "haibox.managed=true",
                 "--label",
                 f"haibox.engagement={engagement_id}",
+                "--label",
+                f"haibox.network-profile={self.network_profile}",
                 "--label",
                 "haibox.created-by=haibox-platform",
                 name,
@@ -292,32 +299,51 @@ class DockerCli:
             raise ContainerError(
                 f"refusing to use network {name!r}: it belongs to another engagement"
             )
-        if not info.internal:
+        if self.network_profile == "isolated" and not info.internal:
             raise ContainerError(f"refusing network {name!r}: it is not internal")
         return info
 
     def _require_network_profile(self, info: NetworkInfo) -> None:
-        if (
-            info.gateway_mode_ipv4 != "isolated"
-            or info.gateway_mode_ipv6 != "isolated"
-        ):
-            raise ContainerError(
-                f"refusing network {info.name!r}: it does not use Docker's "
-                "isolated gateway profile; remove and recreate it. The legacy "
-                "'internal' profile has been removed because it exposed the "
-                "host gateway to runners"
-            )
-        if info.gateway:
-            raise ContainerError(
-                f"refusing network {info.name!r}: it still has a host gateway "
-                f"address ({info.gateway})"
-            )
+        if self.network_profile == "isolated":
+            if (
+                info.gateway_mode_ipv4 != "isolated"
+                or info.gateway_mode_ipv6 != "isolated"
+            ):
+                raise ContainerError(
+                    f"refusing network {info.name!r}: it does not use Docker's "
+                    "isolated gateway profile; remove and recreate it. The legacy "
+                    "'internal' profile has been removed because it exposed the "
+                    "host gateway to runners"
+                )
+            if info.gateway:
+                raise ContainerError(
+                    f"refusing network {info.name!r}: it still has a host gateway "
+                    f"address ({info.gateway})"
+                )
+        elif self.network_profile == "scoped":
+            if info.labels.get("haibox.network-profile") != "scoped":
+                raise ContainerError(
+                    f"refusing network {info.name!r}: missing haibox.network-profile=scoped label"
+                )
 
     def network_remove(self, name: str) -> None:
         if not _NETWORK_RE.fullmatch(name):
             raise ContainerError(f"invalid network name: {name!r}")
-        self._require_managed_network(name)
+        info = self._require_managed_network(name)
+        engagement_id = info.labels.get("haibox.engagement")
         self._check(["network", "rm", name])
+        if engagement_id:
+            with contextlib.suppress(Exception):
+                self.remove_policy(engagement_id)
+
+    # ------------------------------------------------------------------ policy
+    def apply_policy(self, scope: Scope, bridge: str, engagement_id: str) -> None:
+        policy = NftablesPolicy(scope=scope, bridge=bridge, engagement_id=engagement_id)
+        policy.apply(self.runner)
+
+    def remove_policy(self, engagement_id: str) -> None:
+        policy = NftablesPolicy(scope=Scope(), bridge="br-stub", engagement_id=engagement_id)
+        policy.remove(self.runner)
 
     # -------------------------------------------------------------- containers
     def _require_managed_container(
@@ -339,6 +365,12 @@ class DockerCli:
             raise ContainerError(f"container already exists: {spec.name}")
         engagement_id = spec.labels["haibox.engagement"]
         self.ensure_network(spec.network, engagement_id)
+        if self.network_profile == "scoped" and spec.network != "none":
+            net_info = self.network_inspect(spec.network)
+            bridge = net_info.bridge_interface
+            if bridge:
+                scope = load_scope(spec.scope_file)
+                self.apply_policy(scope, bridge, engagement_id)
         result = self._check(spec.to_create_args(), timeout=max(self.settings.timeout_seconds, 120))
         container_id = result.stdout.strip()
         try:
