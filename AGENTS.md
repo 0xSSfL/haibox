@@ -67,10 +67,9 @@ uv run haibox doctor
 - The default network profile is `isolated` (Docker isolated gateway mode). The
   legacy `internal` profile is removed; do not reintroduce it.
 - As of this tree, `scoped` is a prototype, not working scope enforcement:
-  nftables only hooks `forward`, so host services and DNS are not covered;
-  re-applying the policy appends rules; the network profile comes from global
-  config rather than the engagement. Do not claim network-enforced scope
-  without negative integration tests.
+  nftables only hooks `forward`, so host services and Docker embedded DNS are
+  not covered, and there are no negative integration tests. Do not claim
+  network-enforced scope until those exist.
 - Every state-changing command needs an audit entry and a test. Do not claim a
   feature works until it has run against a real Docker endpoint and the result
   is recorded in `README.md` and `docs/verification-status.md`.

@@ -105,22 +105,22 @@ hardens trusted storage.
       loopback (`127.0.0.0/8`, `::1`), and link-local ranges;
 - [x] unit test ruleset compilation, dual-stack CIDRs, exclusion precedence, and
       the `apply`/`remove` lifecycle with `CommandRunner`;
-- [ ] wire policy generation and enforcement into the runtime network creation
+- [x] wire policy generation and enforcement into the runtime network creation
       and cleanup paths;
-      *Partial (2026-11-10):* `DockerCli.create_container` applies the policy
-      for the `scoped` profile and `network_remove` deletes it. Still open:
-      the policy is re-applied per container (rules append instead of being
-      flushed), a missing bridge silently skips enforcement, cleanup errors are
-      suppressed, and there is no runtime test. The network is created from the
-      global `network.profile` setting, while the engagement records
-      `profile.network`; the two can disagree, so setting the global profile to
-      `scoped` also opens every engagement whose profile says `isolated`.
+      *Hardened (2026-11-10):* `DockerCli.create_container` applies the policy
+      for the `scoped` profile and `network_remove` removes it before deleting
+      the network. Re-applying the ruleset flushes and replaces it, a missing
+      bridge aborts container creation, cleanup errors propagate, and the
+      profile comes from the engagement snapshot instead of the global
+      `network.profile` setting. Unit-tested with the scripted runner; no
+      negative integration test yet.
 - [ ] implement the `scoped` connectivity profile and policy gateway container
       (ADR-0010);
       *Partial (2026-11-10):* the `scoped` profile and a non-internal bridge
-      exist. There is no policy gateway container; runners still receive a host
-      gateway address and the nftables forward chain does not filter the host
-      input path (bridge gateway, host services) or Docker's embedded DNS.
+      exist and the per-container policy is applied. There is no policy gateway
+      container; runners still receive a host gateway address and the nftables
+      forward chain does not filter the host input path (bridge gateway, host
+      services) or Docker's embedded DNS.
 - [ ] add negative integration tests proving a runner cannot bypass scope even
       when a tool ignores the scope file;
 - [ ] create a separate `haibox-vault` identity for secrets and audit (ADR-0002);
