@@ -197,7 +197,7 @@ GUI support or a passing GUI image scan.
 **Files:**
 - Create: a temporary PR body outside the repository
 
-- [ ] **Step 1: Commit the review package with Conventional Commits**
+- [x] **Step 1: Commit the review package with Conventional Commits**
 
 Suggested commits:
 
@@ -219,7 +219,7 @@ git add README.md docs/verification-status.md
 git commit -m "docs: record desktop design-review status"
 ```
 
-- [ ] **Step 2: Push the branch and open a PR against `main`**
+- [x] **Step 2: Push the branch and open a PR against `main`**
 
 ```bash
 git push -u origin design/haibox-desktop
@@ -228,10 +228,11 @@ gh pr create --base main --head design/haibox-desktop \
   --body-file <file>
 ```
 
-The PR body must include the summary and rationale, affected paths, exact
+Opened [PR #8](https://github.com/0xSSfL/haibox/pull/8); it remains open and
+unmerged. The body includes the summary and rationale, affected paths, exact
 verification commands and results, completed and follow-up checklists, the
 security verdict, and links to the architecture, PoC, security review, and image
-validation records. Do not merge.
+validation records.
 
 ## Production acceptance gates (not part of this PR)
 
