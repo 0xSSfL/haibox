@@ -95,9 +95,12 @@ free of vulnerabilities. With Trivy or Grype installed, review its scan:
 uv run haibox image scan web-security
 ```
 
-The scan exits non-zero when HIGH/CRITICAL findings remain or the scanner fails.
-Do not treat a failed scan as a security approval. Current results are recorded
-in the [image catalog](docs/image-catalog.md).
+The scan exits non-zero when HIGH/CRITICAL findings remain, the scanner fails,
+or the scanner cannot cover the image OS. Trivy runs first; when Trivy does not
+scan the image's packages (Fedora, Arch Linux), HAIBOX falls back to Grype. An
+empty or unsupported report is never treated as a clean pass. Do not treat a
+failed scan as a security approval. Current results are recorded in the
+[image catalog](docs/image-catalog.md).
 
 ### 4. Try an offline session
 

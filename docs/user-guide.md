@@ -257,7 +257,7 @@ disabling it.
 | `inspect NAME` | Print the manifest. |
 | `build NAME [--no-cache] [--platform] [--reuse-dependencies]` | Build from the pinned manifest; local `depends_on` bases are built first unless explicitly reused. |
 | `verify NAME [--timeout]` | Run manifest verification commands as a non-root user. |
-| `scan NAME [--timeout]` | Run Trivy/Grype with the image-local ignore file. Exits non-zero on HIGH/CRITICAL findings. |
+| `scan NAME [--timeout]` | Run Trivy, falling back to Grype when Trivy cannot scan the image OS, with the image-local ignore file. Exits non-zero on HIGH/CRITICAL findings, scanner failure, or an uncovered report. |
 
 ### 7.5 `scope`
 

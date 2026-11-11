@@ -125,7 +125,7 @@ def image_scan(
     name: str = typer.Argument(..., help="Image definition name."),
     timeout: int = typer.Option(1800, "--timeout", help="Scan timeout in seconds."),
 ) -> None:
-    """Scan a built image with trivy or grype if available."""
+    """Scan a built image with Trivy, falling back to Grype when needed."""
 
     obj = get_context(ctx)
     catalog = _catalog()
@@ -141,14 +141,21 @@ def image_scan(
             "image": manifest.image_ref,
             "tool": result.tool,
             "exit_code": result.exit_code,
+            "covered": result.covered,
+            "findings": result.findings,
             "ignorefile": str(ignorefile) if ignorefile else None,
         },
     )
     if result.output:
         typer.echo(result.output)
     if not result.ok:
+        if not result.covered:
+            raise ImageError(
+                f"scanner {result.tool} did not scan OS packages for "
+                f"{manifest.image_ref}; the image OS is unsupported or not detected"
+            )
         raise ImageError(
-            f"scanner {result.tool} reported findings or failed "
-            f"(exit {result.exit_code})"
+            f"scanner {result.tool} reported {result.findings} HIGH/CRITICAL "
+            f"finding(s) or failed (exit {result.exit_code})"
         )
     console.print(f"Scan completed for [bold]{manifest.image_ref}[/bold]")

@@ -69,8 +69,35 @@ uv run haibox image scan web-security
 ```
 
 `haibox image scan` runs Trivy with `--severity HIGH,CRITICAL` and the
-image-local `images/web-security/trivyignore.yaml`. It exits non-zero on any
-remaining finding.
+image-local `images/<name>/trivyignore.yaml`. It exits non-zero on any remaining
+finding.
+
+A scan also has to cover the image's OS packages. Trivy reports Fedora as
+unsupported and does not detect Arch Linux as an OS; both cases still exit `0`.
+HAIBOX parses the report instead of trusting the exit code:
+
+- Trivy coverage requires `Metadata.OS.Family` and no `Unsupported os` warning.
+- When Trivy is not covered and Grype is installed, the scan falls back to Grype.
+- Grype coverage requires a non-empty `distro.name` and a valid vulnerability
+  database.
+- An empty, unparseable, or uncovered report fails the scan; it is never a pass.
+
+### Scanner coverage validation (2026-11-11)
+
+Run against a real Docker endpoint with Trivy 0.76.2 and Grype 0.121.3:
+
+| Image | Trivy | Fallback | Result |
+|---|---|---|---|
+| `haibox/core:0.1.0` (Debian 13.7) | Covered | Not used | 138 HIGH/CRITICAL; gate red |
+| `fedora:44` | `Unsupported os` | Grype `fedora 44` | 16 HIGH, 8 Medium; gate red on 16 HIGH |
+| `archlinux:latest` | OS not detected | Grype `archlinux 20261108.0.623074` | Grype 2 High; Trivy still reported 24 HIGH/CRITICAL non-OS findings; gate red on 26 combined |
+
+The Fedora and Arch runs confirm that the fallback covers the OS and that the
+gate fails on real findings instead of passing on an empty Trivy report. Trivy
+still scans language packages when it cannot scan OS packages, so the fallback
+keeps those findings; the combined count can overlap but never clears a finding.
+These base-image findings are not suppressed; they are the current blocker for
+a Fedora or Arch desktop image.
 
 Findings that cannot be fixed with the current upstream inputs are analysed
 individually in

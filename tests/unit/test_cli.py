@@ -450,6 +450,58 @@ def test_image_build_verify_and_scan_use_the_runtime(
     assert "clean" in result.output
 
 
+@pytest.mark.parametrize(
+    ("result_kwargs", "expected"),
+    [
+        (
+            {
+                "tool": "trivy",
+                "exit_code": 1,
+                "output": "",
+                "covered": False,
+            },
+            "did not scan OS packages",
+        ),
+        (
+            {
+                "tool": "grype",
+                "exit_code": 1,
+                "output": "",
+                "findings": 2,
+            },
+            "reported 2 HIGH/CRITICAL",
+        ),
+    ],
+)
+def test_image_scan_fails_when_the_scan_is_incomplete(
+    cli_runner: CliRunner,
+    paths: Paths,
+    cli: FakeRuntime,
+    monkeypatch: pytest.MonkeyPatch,
+    result_kwargs,
+    expected: str,
+) -> None:
+    from haibox.images.scan import ScanResult
+
+    class StubScanner:
+        def scan(
+            self,
+            image: str,
+            *,
+            timeout: int = 1800,
+            ignorefile: Path | None = None,
+        ):
+            del image, timeout, ignorefile
+            return ScanResult(**result_kwargs)
+
+    monkeypatch.setattr("haibox.cli.image_cmd.ImageScanner", StubScanner)
+
+    result = invoke(cli_runner, paths, "image", "scan", "web-security")
+    assert result.exit_code != 0
+    assert result.exception is not None
+    assert expected in str(result.exception)
+
+
 def test_unknown_engagement_is_an_error(
     cli_runner: CliRunner, paths: Paths, cli: FakeRuntime
 ) -> None:
