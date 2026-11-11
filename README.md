@@ -27,8 +27,10 @@ Linux; a VM is optional, not a requirement.
 > [!IMPORTANT]
 > **Alpha software.** The default runner network has no external connectivity.
 > VPN traffic routing, a VPN kill switch, and AI integration are not available
-> yet. Current image scans contain unresolved HIGH/CRITICAL findings. See the
-> [current limits](#security-and-current-limits) before running target-facing work.
+> yet. GUI forwarding is not implemented; an internal Xpra proof of concept is
+> not a supported command or feature. Current image scans contain unresolved
+> HIGH/CRITICAL findings. See the [current limits](#security-and-current-limits)
+> before running target-facing work.
 
 ## What you get
 
@@ -188,6 +190,7 @@ escape or a substitute for authorization**. The Docker host remains trusted.
 | External targets | The default runner has no internet or external DNS access. Scoped external connectivity is planned. |
 | VPN | Profile storage and gateway lifecycle code exist, but the gateway image has not been built. Runner routing and the kill switch are not implemented. |
 | AI | The restricted Docker broker and AI adapter are not implemented. Manual use does not require AI. |
+| GUI / desktop | No `haibox gui` commands or supported native-window feature. A Fedora X11 Xpra proof of concept is documented in [verification status](docs/verification-status.md); its disposable image is unscanned, and other Linux distributions and Wayland remain unverified. |
 | Image security | Unresolved dependency vulnerabilities keep the scan gate open. |
 | Secrets and records | Secrets are plaintext at rest with file permissions. Hashes and audit chains are not tamper-proof against a trusted host user or administrator. |
 
