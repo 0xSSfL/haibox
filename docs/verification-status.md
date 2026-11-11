@@ -16,7 +16,7 @@ as working until the corresponding row has a recorded result.
 | Docker context `haibox` | Created; client/server 29.9.2, rechecked 2026-11-08 |
 | Docker integration smoke test | Passed with the final image: 2 passed, 2026-11-09 |
 | Runner network probe (isolated profile) | Manual probe: no default route, no global IPv6, external DNS fails, metadata unreachable, host LAN SSH/PostgreSQL, host bridges, and public IPv4/IPv6 unreachable; container-to-container works, 2026-11-08 |
-| Xpra seamless GUI PoC | Passed for Xpra 6.5.4 on Fedora 44 X11 through a localhost relay and Docker Exec; native xterm windows, auth failure, detach/reconnect, stop/restart, workspace persistence, host-service and cross-engagement network negatives passed. The disposable image has no vulnerability scan: Trivy 0.76.2 does not support Fedora. No production CLI/image change. Internal evidence: `docs/superpowers/poc/` and `docs/superpowers/reviews/`, 2026-11-10 to 2026-11-11 |
+| Xpra seamless GUI readiness | Prototype passed, 2026-11-11: pinned Fedora 44 Xpra 6.5.4 fixture with a 502-RPM inventory; native xterm on X11; GTK3 Wayland client created an `xdg_toplevel` on headless Weston 15.0.1; engagement-bound Unix-socket relay with `SO_PEERCRED`, managed-label/engagement checks, file authentication, 14 deny-by-default controls, and cross-engagement, wrong-password, concurrency, detach, container-stop, and relay-cleanup negatives. Docker inspect confirms no privileged mode, host namespaces, ports, devices, Docker socket, or host display socket. Scan: Trivy 0.76.2 rejects Fedora as unsupported, Grype 0.121.3 covers it but reports 4 CRITICAL and 61 HIGH, so the image gate stays closed. Wayland input forwarding is untested. No production CLI, sidecar, or catalog image; internal evidence: `docs/superpowers/poc/2026-11-11-xpra-gui-readiness.md` |
 | `haibox vpn` profile CLI | `add`, `list`, `show`, `status` passed on Fedora, 2026-11-03 |
 | `haibox vpn up` without gateway image | Fails cleanly with exit 1 and no traceback, 2026-11-03 |
 | VPN gateway lifecycle | Not run; `haibox/vpn-gateway:0.1.0` is not built |
@@ -59,7 +59,7 @@ as working until the corresponding row has a recorded result.
 | VPN profile store and gateway lifecycle | Implemented; gateway image not built |
 | Transparent VPN routing and kill switch | Not implemented |
 | Restricted Docker broker + AI adapter | Not implemented |
-| GUI / desktop | Production feature not implemented. A narrow Xpra seamless PoC passed on Fedora 44 X11; no `haibox gui` CLI, distro matrix, or Wayland validation. See the internal design-review records under `docs/superpowers/`. |
+| GUI / desktop | Production feature not implemented. The 2026-11-11 readiness prototype passed on Fedora 44 X11 and headless Wayland with an engagement-bound Unix-socket relay, but the GUI image scan has 4 CRITICAL and 61 HIGH findings and Wayland input is unverified. No `haibox gui` command, GUI `ContainerSpec` field, or catalog image. See `docs/superpowers/poc/2026-11-11-xpra-gui-readiness.md`. |
 
 ## Related Documentation
 

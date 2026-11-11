@@ -142,3 +142,26 @@ The design direction is acceptable for continued isolated prototyping. The
 production implementation is **not approved**, the disposable image is **not a
 catalog image**, and this branch makes **no claim of GUI security, scanner
 coverage, or supported cross-distro operation**.
+
+## Status update: 2026-11-11 readiness prototype
+
+The lifecycle decision is recorded in
+[ADR-0011](../../adr/0011-gui-session-in-existing-runner.md): GUI sessions stay
+inside the existing engagement runner; there is no per-engagement GUI sidecar.
+Prototype evidence is in
+[2026-11-11 Xpra GUI readiness](../poc/2026-11-11-xpra-gui-readiness.md).
+
+| Finding | Status after the prototype | Remaining work |
+|---|---|---|
+| F-01 scanner coverage | Coverage closed: the hardened adapter rejects Trivy's unsupported Fedora report and falls back to Grype. The image still has 4 CRITICAL and 61 HIGH findings. | Reduce or justify findings; the vulnerability gate is still closed. |
+| F-02 host client surface | Open. Pinned Xpra 6.5.4 client/server; no hostile-stream or fuzz tests. | Malformed/truncated stream tests, resource limits, version matrix. |
+| F-03 relay authorization/lifecycle | Prototype validates engagement ID, managed label, engagement label, running state, local UID, one-client concurrency, detach, stop, and SIGTERM cleanup. | Production audit integration, crash/reconnect tests, backpressure, restricted runtime seam. |
+| F-04 forwarding controls | 14 server flags asserted from `/proc`, matching client flags, negotiated subsystem check; no forbidden subsystem observed. | Per-feature adversarial negative tests and fail-closed production checks. |
+| F-05 scope | GUI remains on `isolated`; cross-engagement DNS/probe blocked. | Keep external targets blocked until M2 scope enforcement. |
+| F-06 credentials | Per-session random password over stdin, mode-0600 files, not in argv. | Rotation, revocation, redaction, and host-compromise analysis. |
+| F-07 packaging | Fedora 44 Xpra 6.5.4 only; 502-package inventory recorded. | Debian base/host-client packaging and version policy. |
+| F-08 Wayland | Headless Weston 15.0.1: Xpra GTK3 Wayland client created an `xdg_toplevel` for `xterm on haibox-gui-a`. Input devices were absent. | Real Fedora Workstation Wayland session and keyboard/pointer tests. |
+| F-09 residual risk | Open. | Container escape, compositor, and client vulnerability work. |
+
+No production `haibox gui` command, `ContainerSpec` GUI field, or catalog image
+is added by this update.
