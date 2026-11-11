@@ -31,11 +31,17 @@ class ScanResult:
     output: str
     covered: bool = True
     findings: int = 0
+    error: str | None = None
 
     @property
     def ok(self) -> bool:
         """A scan passes only when it covered the image and found nothing."""
-        return self.exit_code == 0 and self.covered and self.findings == 0
+        return (
+            self.exit_code == 0
+            and self.covered
+            and self.findings == 0
+            and self.error is None
+        )
 
 
 class ImageScanner:
@@ -64,11 +70,11 @@ class ImageScanner:
 
         if "trivy" in tools:
             trivy = self._scan_trivy(image, timeout=timeout, ignorefile=ignorefile)
-            if trivy.covered:
+            if trivy.covered and trivy.error is None:
                 return trivy
             if "grype" in tools:
                 grype = self._scan_grype(image, timeout=timeout)
-                if grype.covered:
+                if grype.covered and grype.error is None:
                     # Trivy still scans language packages and files for secrets
                     # when it cannot scan OS packages. Keep those findings so
                     # the fallback cannot hide what Trivy already reported.
@@ -79,12 +85,15 @@ class ImageScanner:
                             f"\ntrivy: {trivy.findings} HIGH/CRITICAL finding(s) "
                             "outside OS coverage are included."
                         )
+                    # A Trivy operational or inconsistent result is not cleared
+                    # by a clean Grype report.
                     return ScanResult(
                         tool="grype",
-                        exit_code=1 if findings else 0,
+                        exit_code=1 if findings or trivy.error else 0,
                         output=output,
                         covered=True,
                         findings=findings,
+                        error=trivy.error,
                     )
                 return self._combined_uncovered(trivy, grype)
             return trivy
@@ -103,6 +112,7 @@ class ImageScanner:
             "trivy",
             "image",
             # --quiet would hide the "Unsupported os" warning used below.
+            "--list-all-pkgs",
             "--severity",
             "HIGH,CRITICAL",
             "--format",
@@ -122,22 +132,27 @@ class ImageScanner:
             return ScanResult(
                 tool="trivy",
                 exit_code=process.returncode or 1,
-                output=self._process_error("trivy", process),
+                output=self._process_error("trivy", process, include_stdout=True),
                 covered=False,
+                error=f"trivy produced no parseable JSON report (exit {process.returncode})",
             )
 
-        covered = _trivy_covered(report, process.stderr)
+        coverage_problem = _trivy_coverage_problem(report, process.stderr)
         findings = _trivy_findings(report)
-        output = _trivy_summary(report, covered, findings)
-        if process.returncode not in (0, 1):
-            covered = False
+        exit_problem = _trivy_exit_problem(process.returncode, findings)
+        covered = coverage_problem is None and exit_problem is None
+        output = _trivy_summary(
+            report, coverage_problem, exit_problem, findings
+        )
+        if exit_problem:
             output = f"{self._process_error('trivy', process)}\n{output}".strip()
         return ScanResult(
             tool="trivy",
-            exit_code=1 if not covered or findings else 0,
+            exit_code=1 if coverage_problem or exit_problem or findings else 0,
             output=output,
             covered=covered,
             findings=findings,
+            error=exit_problem,
         )
 
     # ------------------------------------------------------------------ grype
@@ -149,24 +164,27 @@ class ImageScanner:
             return ScanResult(
                 tool="grype",
                 exit_code=process.returncode or 1,
-                output=self._process_error("grype", process),
+                output=self._process_error("grype", process, include_stdout=True),
                 covered=False,
+                error=f"grype produced no parseable JSON report (exit {process.returncode})",
             )
 
-        covered = _grype_covered(report)
+        coverage_problem = _grype_coverage_problem(report)
         findings = _grype_findings(report)
-        output = _grype_summary(report, covered, findings)
-        # Grype exits 2 when --fail-on matches a vulnerability and 1 on an
-        # operational error. Exit 2 with no parsed finding is still a failure.
-        if process.returncode not in (0, 2) or (process.returncode == 2 and not findings):
-            covered = False
+        exit_problem = _grype_exit_problem(process.returncode, findings)
+        covered = coverage_problem is None and exit_problem is None
+        output = _grype_summary(
+            report, coverage_problem, exit_problem, findings
+        )
+        if exit_problem:
             output = f"{self._process_error('grype', process)}\n{output}".strip()
         return ScanResult(
             tool="grype",
-            exit_code=1 if not covered or findings else 0,
+            exit_code=1 if coverage_problem or exit_problem or findings else 0,
             output=output,
             covered=covered,
             findings=findings,
+            error=exit_problem,
         )
 
     @staticmethod
@@ -181,18 +199,28 @@ class ImageScanner:
         return parsed if isinstance(parsed, dict) else None
 
     @staticmethod
-    def _process_error(tool: str, process: ProcessResult) -> str:
-        detail = (process.stderr or process.stdout).strip()
+    def _process_error(
+        tool: str,
+        process: ProcessResult,
+        *,
+        include_stdout: bool = False,
+    ) -> str:
+        detail = process.stderr.strip()
+        if include_stdout and not detail:
+            detail = process.stdout.strip()
         message = f"{tool}: scanner failed (exit {process.returncode})"
         return f"{message}\n{detail}" if detail else message
 
     @staticmethod
     def _combined_uncovered(left: ScanResult, right: ScanResult) -> ScanResult:
+        errors = [error for error in (left.error, right.error) if error]
         return ScanResult(
             tool=f"{left.tool}+{right.tool}",
             exit_code=1,
             output=f"{left.output}\n{right.output}".strip(),
             covered=False,
+            findings=left.findings + right.findings,
+            error="; ".join(errors) or None,
         )
 
 
@@ -204,14 +232,60 @@ def _os_label(info: Any, name_key: str, version_key: str) -> str:
     return f"{name} {version}".strip() or "unknown OS"
 
 
-def _trivy_covered(report: dict[str, Any], stderr: str) -> bool:
+def _trivy_coverage_problem(report: dict[str, Any], stderr: str) -> str | None:
+    """Return why the Trivy report does not prove OS package coverage."""
+    if "unsupported os" in stderr.lower():
+        return "Trivy reported the image OS as unsupported"
+
     metadata = report.get("Metadata")
     os_info = metadata.get("OS") if isinstance(metadata, dict) else None
-    if not isinstance(os_info, dict) or not os_info.get("Family"):
-        return False
-    # Trivy detects some distributions (Fedora) but cannot scan them. It
-    # reports that on stderr and still exits 0 with an empty result set.
-    return "unsupported os" not in stderr.lower()
+    if not isinstance(os_info, dict):
+        return "the report has no OS metadata"
+    family = str(os_info.get("Family") or "").strip()
+    version = str(os_info.get("Name") or "").strip()
+    if not family or not version:
+        return "the report has an incomplete OS identity"
+
+    results = report.get("Results")
+    if not isinstance(results, list):
+        return "the report has no Results list"
+
+    os_results = [
+        result
+        for result in results
+        if isinstance(result, dict) and result.get("Class") == "os-pkgs"
+    ]
+    if not os_results:
+        # An empty report is not proof that the image is package-free.
+        return (
+            "the report has no os-pkgs result; a package-free image must be "
+            "verified separately"
+        )
+
+    for result in os_results:
+        package_type = str(result.get("Type") or "").strip()
+        if not package_type:
+            return "an os-pkgs result has no package manager type"
+        packages = result.get("Packages")
+        if not isinstance(packages, list) or not packages:
+            return "an os-pkgs result has no package inventory"
+        if not any(
+            isinstance(package, dict) and str(package.get("Name") or "").strip()
+            for package in packages
+        ):
+            return "the OS package inventory is malformed"
+    return None
+
+
+def _trivy_exit_problem(returncode: int, findings: int) -> str | None:
+    """Reject exit codes that contradict the report contents."""
+    if returncode not in (0, 1):
+        return f"Trivy exited {returncode} instead of 0 or 1"
+    if returncode == 1 and findings == 0:
+        return "Trivy exited 1 but reported no HIGH/CRITICAL findings"
+    if returncode == 0 and findings > 0:
+        return "Trivy exited 0 but reported HIGH/CRITICAL findings"
+    return None
 
 
 def _trivy_findings(report: dict[str, Any]) -> int:
@@ -234,14 +308,19 @@ def _trivy_findings(report: dict[str, Any]) -> int:
     return count
 
 
-def _trivy_summary(report: dict[str, Any], covered: bool, findings: int) -> str:
+def _trivy_summary(
+    report: dict[str, Any],
+    coverage_problem: str | None,
+    exit_problem: str | None,
+    findings: int,
+) -> str:
     metadata = report.get("Metadata")
     os_info = metadata.get("OS") if isinstance(metadata, dict) else None
-    if not covered:
-        label = _os_label(os_info, "Family", "Name")
+    label = _os_label(os_info, "Family", "Name")
+    if coverage_problem:
         lines = [
             f"trivy: OS packages were not scanned ({label}).",
-            "  Trivy does not support this image OS; use a scanner that does.",
+            f"  {coverage_problem}.",
         ]
         if findings:
             lines.append(
@@ -249,7 +328,9 @@ def _trivy_summary(report: dict[str, Any], covered: bool, findings: int) -> str:
             )
         return "\n".join(lines)
 
-    lines = [f"trivy: {_os_label(os_info, 'Family', 'Name')}"]
+    lines = [f"trivy: {label}"]
+    if exit_problem:
+        lines.append(f"trivy: {exit_problem}.")
     lines.append(f"HIGH/CRITICAL: {findings}")
     if not findings:
         lines.append("  No HIGH/CRITICAL findings.")
@@ -300,20 +381,98 @@ def _grype_distro(report: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
-def _grype_covered(report: dict[str, Any]) -> bool:
-    distro = _grype_distro(report)
-    name = str(distro.get("name", "")).strip()
+def _grype_coverage_problem(report: dict[str, Any]) -> str | None:
+    """Return why the Grype report does not prove package coverage.
+
+    Grype's JSON document does not list every scanned package. Coverage is
+    accepted only from a complete image target inventory (identity, layers, and
+    size), an identified distro and version, a valid vulnerability database,
+    and structurally complete match records. Anything less fails closed.
+    """
+    matches = report.get("matches")
+    if not isinstance(matches, list):
+        return "the report has no matches list"
+
+    source = report.get("source")
+    if not isinstance(source, dict) or source.get("type") != "image":
+        return "the report is not an image scan"
+    target = source.get("target")
+    if not isinstance(target, dict):
+        return "the report has no image target inventory"
+    image_id = str(target.get("imageID") or "").strip()
+    manifest_digest = str(target.get("manifestDigest") or "").strip()
+    if not image_id and not manifest_digest:
+        return "the image target has no identity"
+    layers = target.get("layers")
+    if not isinstance(layers, list) or not layers:
+        return "the image target has no layer inventory"
+    if not any(
+        isinstance(layer, dict)
+        and (layer.get("digest") or layer.get("mediaType"))
+        for layer in layers
+    ):
+        return "the image layer inventory is malformed"
+    image_size = target.get("imageSize")
+    if not isinstance(image_size, int) or image_size <= 0:
+        return "the image target has no content size"
+
+    distro = report.get("distro")
+    if not isinstance(distro, dict):
+        return "the report has no distro"
+    name = str(distro.get("name") or "").strip()
+    version = str(distro.get("version") or "").strip()
     if not name or name.lower() == "unknown":
-        return False
+        return "the report has no identified distro"
+    if not version:
+        return "the report has no distro version"
 
     descriptor = report.get("descriptor")
-    if isinstance(descriptor, dict):
-        db = descriptor.get("db")
-        if isinstance(db, dict):
-            status = db.get("status")
-            if isinstance(status, dict) and status.get("valid") is False:
-                return False
-    return True
+    if not isinstance(descriptor, dict):
+        return "the report has no descriptor"
+    db = descriptor.get("db")
+    if not isinstance(db, dict):
+        return "the report has no vulnerability database"
+    if db.get("error"):
+        return "the vulnerability database reported an error"
+    status = db.get("status")
+    if not isinstance(status, dict):
+        return "the vulnerability database has no status"
+    if status.get("error"):
+        return "the vulnerability database status reported an error"
+    if status.get("valid") is not True:
+        return "the vulnerability database is not valid"
+
+    for match in matches:
+        if not isinstance(match, dict):
+            return "a match is not an object"
+        vulnerability = match.get("vulnerability")
+        if not isinstance(vulnerability, dict):
+            return "a match has no vulnerability"
+        if not str(vulnerability.get("id") or "").strip():
+            return "a match has no vulnerability id"
+        if not str(vulnerability.get("severity") or "").strip():
+            return "a match has no severity"
+        artifact = match.get("artifact")
+        if not isinstance(artifact, dict):
+            return "a match has no package artifact"
+        if not str(artifact.get("name") or "").strip():
+            return "a match artifact has no name"
+        if not str(artifact.get("version") or "").strip():
+            return "a match artifact has no version"
+        if not str(artifact.get("type") or "").strip():
+            return "a match artifact has no package type"
+    return None
+
+
+def _grype_exit_problem(returncode: int, findings: int) -> str | None:
+    """Reject exit codes that contradict the report contents."""
+    if returncode not in (0, 2):
+        return f"Grype exited {returncode} instead of 0 or 2"
+    if returncode == 2 and findings == 0:
+        return "Grype exited 2 but reported no HIGH/CRITICAL findings"
+    if returncode == 0 and findings > 0:
+        return "Grype exited 0 but reported HIGH/CRITICAL findings"
+    return None
 
 
 def _grype_findings(report: dict[str, Any]) -> int:
@@ -330,16 +489,28 @@ def _grype_findings(report: dict[str, Any]) -> int:
     return count
 
 
-def _grype_summary(report: dict[str, Any], covered: bool, findings: int) -> str:
+def _grype_summary(
+    report: dict[str, Any],
+    coverage_problem: str | None,
+    exit_problem: str | None,
+    findings: int,
+) -> str:
     distro = _grype_distro(report)
-    if not covered:
-        return (
-            "grype: OS packages were not scanned "
-            f"({_os_label(distro, 'name', 'version')}).\n"
-            "  Grype could not identify a supported image OS."
-        )
+    label = _os_label(distro, "name", "version")
+    if coverage_problem:
+        lines = [
+            f"grype: OS packages were not scanned ({label}).",
+            f"  {coverage_problem}.",
+        ]
+        if findings:
+            lines.append(
+                f"  {findings} HIGH/CRITICAL non-OS finding(s) were still reported."
+            )
+        return "\n".join(lines)
 
-    lines = [f"grype: {_os_label(distro, 'name', 'version')}"]
+    lines = [f"grype: {label}"]
+    if exit_problem:
+        lines.append(f"grype: {exit_problem}.")
     lines.append(f"HIGH/CRITICAL: {findings}")
     if not findings:
         lines.append("  No HIGH/CRITICAL findings.")

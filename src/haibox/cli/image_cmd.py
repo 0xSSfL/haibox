@@ -143,12 +143,18 @@ def image_scan(
             "exit_code": result.exit_code,
             "covered": result.covered,
             "findings": result.findings,
+            "error": result.error,
             "ignorefile": str(ignorefile) if ignorefile else None,
         },
     )
     if result.output:
         typer.echo(result.output)
     if not result.ok:
+        if result.error:
+            raise ImageError(
+                f"scanner {result.tool} failed for {manifest.image_ref}: "
+                f"{result.error}"
+            )
         if not result.covered:
             raise ImageError(
                 f"scanner {result.tool} did not scan OS packages for "

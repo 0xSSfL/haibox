@@ -333,8 +333,10 @@ command.
 
 `image scan` uses Trivy when present, then Grype. It passes only the image-local
 `trivyignore.yaml`; there is no global suppression file and no
-`--ignore-unfixed`. A non-zero exit means HIGH/CRITICAL findings remain or the
-scanner failed.
+`--ignore-unfixed`. Trivy must return an `os-pkgs` result with a package
+inventory, and Grype must return a complete image target and a valid database.
+A non-zero exit means HIGH/CRITICAL findings remain, the scanner failed, or the
+report did not prove OS package coverage.
 
 ### Current image status
 

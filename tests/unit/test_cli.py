@@ -449,6 +449,16 @@ def test_image_build_verify_and_scan_use_the_runtime(
     assert result.exit_code == 0, result.output
     assert "clean" in result.output
 
+    entries = [
+        json.loads(line)
+        for line in (paths.logs_dir / "audit.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    scan_entry = [entry for entry in entries if entry["event"] == "image.scanned"][-1]
+    assert scan_entry["data"]["error"] is None
+    assert scan_entry["data"]["covered"] is True
+
 
 @pytest.mark.parametrize(
     ("result_kwargs", "expected"),
@@ -470,6 +480,15 @@ def test_image_build_verify_and_scan_use_the_runtime(
                 "findings": 2,
             },
             "reported 2 HIGH/CRITICAL",
+        ),
+        (
+            {
+                "tool": "grype",
+                "exit_code": 1,
+                "output": "",
+                "error": "Grype exited 2 but reported no HIGH/CRITICAL findings",
+            },
+            "Grype exited 2 but reported no HIGH/CRITICAL findings",
         ),
     ],
 )
@@ -500,6 +519,15 @@ def test_image_scan_fails_when_the_scan_is_incomplete(
     assert result.exit_code != 0
     assert result.exception is not None
     assert expected in str(result.exception)
+
+    entries = [
+        json.loads(line)
+        for line in (paths.logs_dir / "audit.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    scan_entry = [entry for entry in entries if entry["event"] == "image.scanned"][-1]
+    assert scan_entry["data"]["error"] == result_kwargs.get("error")
 
 
 def test_unknown_engagement_is_an_error(
