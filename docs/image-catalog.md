@@ -102,8 +102,10 @@ change the target image's own build.
 `image verify` runs every `verify` command in an ephemeral container as
 uid/gid `65534`, with `--network none`, and fails on the first non-zero command.
 It also asserts that the verification process is not root. `image scan` uses
-Trivy first and Grype second, passes only the image-local `trivyignore.yaml`,
-and exits non-zero on any HIGH/CRITICAL finding or scanner failure.
+Trivy first, falls back to Grype when Trivy cannot scan the image OS, passes
+only the image-local `trivyignore.yaml`, and exits non-zero on any
+HIGH/CRITICAL finding, scanner failure, or report that does not cover OS
+packages.
 
 ## Pinning policy
 
