@@ -28,6 +28,7 @@ as working until the corresponding row has a recorded result.
 | Full image build & verify | Passed; digest `sha256:bfac7833…be69dd2b`, 31 pinned tools verified, 2026-11-09 |
 | Catalog vulnerability scans (Trivy) | Baselines recorded for all 6 variants; gate open on dependency findings (Debian 13 base packages and pinned Go modules), 2026-11-09 |
 | Scanner coverage and Grype fallback | **Passed** against real Docker: Trivy covered Debian core (138 findings); Fedora 44 (`Unsupported os`) fell back to Grype for 16 HIGH, and Arch Linux (OS not detected) combined 2 Grype HIGH with 24 Trivy non-OS findings. Uncovered reports fail instead of passing, 2026-11-11 |
+| Scanner validation hardening | **Passed** against real Docker and unit regressions: Trivy `--list-all-pkgs` now requires an `os-pkgs` result with a package-manager type and non-empty package inventory; Grype requires image target identity/layers/size, distro name and version, a valid database, and structurally complete matches. Reports with contradictory exit codes, missing inventory, or malformed matches fail. Rerun reproduced Debian 138, Fedora 16, and Arch 26 combined findings, 2026-11-11 |
 | Trivy suppression scope check | **Passed** for `web-security`, `osint`, and `full`: all removed secret findings matched declared path/rule scopes, 2026-11-09 |
 | `haibox info` / interactive menu | `info` (table and JSON) and `tui` smoke-tested, 2026-11-09 |
 | KVM VM | Optional; not created |

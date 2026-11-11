@@ -239,22 +239,29 @@ def _process(
     )
 
 
+_OS_PACKAGE = {"Name": "libc6", "Version": "2.41-1", "ID": "libc6@2.41-1"}
+
+
 def _trivy_report(
     *,
     family: str | None = "debian",
     version: str = "13.7",
     vulnerabilities: list[dict[str, Any]] | None = None,
     secrets: list[dict[str, Any]] | None = None,
+    packages: list[dict[str, Any]] | None = None,
+    package_type: str | None = None,
+    include_os_result: bool = True,
 ) -> str:
     metadata: dict[str, Any] = {}
     if family is not None:
         metadata["OS"] = {"Family": family, "Name": version}
     results: list[dict[str, Any]] = []
-    if family is not None:
+    if family is not None and include_os_result:
         result: dict[str, Any] = {
             "Target": "image (os)",
             "Class": "os-pkgs",
-            "Type": family,
+            "Type": family if package_type is None else package_type,
+            "Packages": [_OS_PACKAGE] if packages is None else packages,
         }
         if vulnerabilities:
             result["Vulnerabilities"] = vulnerabilities
@@ -264,20 +271,50 @@ def _trivy_report(
     return json.dumps({"Metadata": metadata, "Results": results})
 
 
+def _grype_target() -> dict[str, Any]:
+    return {
+        "imageID": "sha256:" + "0" * 64,
+        "manifestDigest": "sha256:" + "1" * 64,
+        "layers": [
+            {
+                "digest": "sha256:" + "2" * 64,
+                "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+            }
+        ],
+        "imageSize": 123456789,
+    }
+
+
 def _grype_report(
     *,
     distro: str = "fedora",
     version: str = "44",
     matches: list[dict[str, Any]] | None = None,
     db_valid: bool = True,
+    db_error: str | None = None,
+    status_error: str | None = None,
+    db_status: bool = True,
+    source_type: str | None = "image",
+    target_updates: dict[str, Any] | None = None,
 ) -> str:
-    return json.dumps(
-        {
-            "distro": {"name": distro, "version": version, "idLike": []},
-            "matches": matches or [],
-            "descriptor": {"db": {"status": {"valid": db_valid}}},
-        }
-    )
+    db: dict[str, Any] = {}
+    if db_status:
+        status: dict[str, Any] = {"valid": db_valid}
+        if status_error:
+            status["error"] = status_error
+        db["status"] = status
+    if db_error:
+        db["error"] = db_error
+    report: dict[str, Any] = {
+        "distro": {"name": distro, "version": version, "idLike": []},
+        "matches": matches or [],
+        "descriptor": {"db": db},
+    }
+    if source_type is not None:
+        target = _grype_target()
+        target.update(target_updates or {})
+        report["source"] = {"type": source_type, "target": target}
+    return json.dumps(report)
 
 
 def _vuln(vuln_id: str = "CVE-2024-0001", severity: str = "HIGH") -> dict[str, Any]:
@@ -329,6 +366,7 @@ def test_scanner_detects_trivy() -> None:
     assert args[:2] == ["trivy", "image"]
     assert args[-1] == "haibox/web-security:0.1.0"
     assert "--exit-code" in args
+    assert "--list-all-pkgs" in args
 
 
 def test_scanner_passes_a_scoped_ignore_file(tmp_path: Path) -> None:
@@ -566,11 +604,206 @@ def test_scanner_rejects_grype_exit_two_without_findings() -> None:
     assert not result.ok
 
 
+def test_scanner_rejects_trivy_os_metadata_without_package_results() -> None:
+    runner = _ToolRunner(
+        lambda args, kwargs: _process(_trivy_report(include_os_result=False)),
+        {"trivy"},
+    )
+    result = ImageScanner(runner).scan("image")
+    assert not result.covered
+    assert not result.ok
+    assert "os-pkgs" in result.output
+
+
+def test_scanner_rejects_trivy_empty_package_inventory() -> None:
+    runner = _ToolRunner(
+        lambda args, kwargs: _process(_trivy_report(packages=[])), {"trivy"}
+    )
+    result = ImageScanner(runner).scan("image")
+    assert not result.covered
+    assert not result.ok
+    assert "package inventory" in result.output
+
+
+def test_scanner_rejects_trivy_malformed_package_inventory() -> None:
+    runner = _ToolRunner(
+        lambda args, kwargs: _process(_trivy_report(packages=[{"Version": "1.0"}])),
+        {"trivy"},
+    )
+    result = ImageScanner(runner).scan("image")
+    assert not result.covered
+    assert not result.ok
+    assert "malformed" in result.output
+
+
+def test_scanner_rejects_trivy_result_without_package_type() -> None:
+    runner = _ToolRunner(
+        lambda args, kwargs: _process(_trivy_report(package_type="")), {"trivy"}
+    )
+    result = ImageScanner(runner).scan("image")
+    assert not result.covered
+    assert not result.ok
+    assert "package manager type" in result.output
+
+
+def test_scanner_rejects_trivy_exit_one_without_findings() -> None:
+    runner = _ToolRunner(
+        lambda args, kwargs: _process(_trivy_report(), returncode=1), {"trivy"}
+    )
+    result = ImageScanner(runner).scan("image")
+    assert not result.covered
+    assert result.error is not None
+    assert not result.ok
+
+
+def test_scanner_rejects_trivy_exit_zero_with_findings() -> None:
+    report = _trivy_report(vulnerabilities=[_vuln()])
+    runner = _ToolRunner(lambda args, kwargs: _process(report), {"trivy"})
+    result = ImageScanner(runner).scan("image")
+    assert result.findings == 1
+    assert result.error is not None
+    assert not result.ok
+
+
+def test_scanner_rejects_an_unexpected_trivy_exit_code() -> None:
+    runner = _ToolRunner(
+        lambda args, kwargs: _process(_trivy_report(), returncode=2), {"trivy"}
+    )
+    result = ImageScanner(runner).scan("image")
+    assert result.error is not None
+    assert not result.ok
+
+
+def test_scanner_rejects_grype_report_without_source_inventory() -> None:
+    runner = _ToolRunner(
+        lambda args, kwargs: _process(_grype_report(source_type=None)), {"grype"}
+    )
+    result = ImageScanner(runner).scan("image")
+    assert not result.covered
+    assert not result.ok
+
+
+def test_scanner_rejects_grype_report_without_layers() -> None:
+    runner = _ToolRunner(
+        lambda args, kwargs: _process(_grype_report(target_updates={"layers": []})),
+        {"grype"},
+    )
+    result = ImageScanner(runner).scan("image")
+    assert not result.covered
+    assert not result.ok
+    assert "layer inventory" in result.output
+
+
+def test_scanner_rejects_grype_report_without_image_size() -> None:
+    runner = _ToolRunner(
+        lambda args, kwargs: _process(_grype_report(target_updates={"imageSize": 0})),
+        {"grype"},
+    )
+    result = ImageScanner(runner).scan("image")
+    assert not result.covered
+    assert not result.ok
+
+
+def test_scanner_rejects_grype_report_without_image_identity() -> None:
+    runner = _ToolRunner(
+        lambda args, kwargs: _process(
+            _grype_report(target_updates={"imageID": "", "manifestDigest": ""})
+        ),
+        {"grype"},
+    )
+    result = ImageScanner(runner).scan("image")
+    assert not result.covered
+    assert not result.ok
+
+
+def test_scanner_rejects_grype_report_without_database_status() -> None:
+    runner = _ToolRunner(
+        lambda args, kwargs: _process(_grype_report(db_status=False)), {"grype"}
+    )
+    result = ImageScanner(runner).scan("image")
+    assert not result.covered
+    assert not result.ok
+
+
+def test_scanner_rejects_grype_database_error() -> None:
+    runner = _ToolRunner(
+        lambda args, kwargs: _process(_grype_report(db_error="database unavailable")),
+        {"grype"},
+    )
+    result = ImageScanner(runner).scan("image")
+    assert not result.covered
+    assert not result.ok
+    assert "database" in result.output
+
+
+def test_scanner_rejects_a_malformed_grype_match() -> None:
+    malformed = {
+        "vulnerability": {"id": "CVE-2024-0001", "severity": "High"},
+        "artifact": {"name": "", "version": "1.0", "type": "rpm"},
+    }
+    runner = _ToolRunner(
+        lambda args, kwargs: _process(
+            _grype_report(matches=[malformed]), returncode=2
+        ),
+        {"grype"},
+    )
+    result = ImageScanner(runner).scan("image")
+    assert not result.covered
+    assert not result.ok
+
+
+def test_scanner_rejects_grype_operational_exit_code() -> None:
+    runner = _ToolRunner(
+        lambda args, kwargs: _process(_grype_report(), returncode=1), {"grype"}
+    )
+    result = ImageScanner(runner).scan("image")
+    assert result.error is not None
+    assert not result.ok
+
+
+def test_scanner_rejects_grype_exit_zero_with_findings() -> None:
+    report = _grype_report(matches=[_match()])
+    runner = _ToolRunner(lambda args, kwargs: _process(report), {"grype"})
+    result = ImageScanner(runner).scan("image")
+    assert result.findings == 1
+    assert result.error is not None
+    assert not result.ok
+
+
+def test_scanner_fallback_keeps_trivy_operational_error() -> None:
+    def handler(args: list[str], kwargs: dict[str, Any]) -> ProcessResult:
+        if args[0] == "trivy":
+            return _process(_trivy_report(), returncode=1)
+        return _process(_grype_report())
+
+    runner = _ToolRunner(handler, {"trivy", "grype"})
+    result = ImageScanner(runner).scan("image")
+    assert result.tool == "grype"
+    assert result.covered
+    assert result.error is not None
+    assert not result.ok
+
+
+def test_scanner_fallback_keeps_trivy_contradictory_findings() -> None:
+    def handler(args: list[str], kwargs: dict[str, Any]) -> ProcessResult:
+        if args[0] == "trivy":
+            return _process(_trivy_report(vulnerabilities=[_vuln()]))
+        return _process(_grype_report())
+
+    runner = _ToolRunner(handler, {"trivy", "grype"})
+    result = ImageScanner(runner).scan("image")
+    assert result.tool == "grype"
+    assert result.findings == 1
+    assert result.error is not None
+    assert not result.ok
+
+
 def test_scan_result_requires_coverage_and_no_findings() -> None:
     assert ScanResult("trivy", 0, "").ok
     assert not ScanResult("trivy", 1, "").ok
     assert not ScanResult("trivy", 0, "", covered=False).ok
     assert not ScanResult("trivy", 0, "", findings=1).ok
+    assert not ScanResult("trivy", 0, "", error="scanner failed").ok
 
 
 def test_default_images_root_prefers_override(

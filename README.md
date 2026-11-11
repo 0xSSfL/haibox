@@ -98,9 +98,13 @@ uv run haibox image scan web-security
 ```
 
 The scan exits non-zero when HIGH/CRITICAL findings remain, the scanner fails,
-or the scanner cannot cover the image OS. Trivy runs first; when Trivy does not
-scan the image's packages (Fedora, Arch Linux), HAIBOX falls back to Grype. An
-empty or unsupported report is never treated as a clean pass. Do not treat a
+or the scanner cannot prove it scanned the image OS packages. Trivy runs first
+with `--list-all-pkgs`; coverage requires an `os-pkgs` result with a package
+manager and a non-empty package inventory. When Trivy cannot cover the image
+(Fedora, Arch Linux), HAIBOX falls back to Grype and requires an image target
+inventory, distro identity, a valid vulnerability database, and structurally
+complete matches. Exit codes that contradict the report also fail the scan, and
+an empty or unsupported report is never treated as a clean pass. Do not treat a
 failed scan as a security approval. Current results are recorded in the
 [image catalog](docs/image-catalog.md).
 

@@ -87,8 +87,9 @@ uv run haibox doctor
   `--reuse-dependencies` to avoid rebuilding an already-scanned base; rebuilding
   changes the digest and invalidates scan evidence.
 - `image verify` runs manifest commands as uid `65534` with no network.
-  `image scan` uses Trivy then Grype, fails when neither scanner covers the
-  image OS, and exits 1 on HIGH/CRITICAL.
+  `image scan` uses Trivy then Grype, fails when neither scanner can prove OS
+  package coverage, and exits 1 on HIGH/CRITICAL findings or a report whose exit
+  code contradicts its contents.
 - All six images have recorded Trivy baselines in `docs/image-catalog.md`, and
   the gate is open for every one. `images/README.md` and `docs/user-guide.md`
   still say only Web Security was scanned; trust the catalog matrix.
