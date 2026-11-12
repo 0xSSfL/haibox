@@ -7,15 +7,21 @@ the engagement container with a fixed command line. Every forwarding feature is
 explicitly disabled; the server listens only on container loopback and has no
 published port.
 
+Session preflight is the same as the relay: the engagement must use the
+``isolated`` network profile and must not have external targets. Host password
+files are created with mode 0600 in an owner-controlled 0700 directory, and
+both host and container copies are removed on stop or failed prepare.
+
 Usage:
     uv run python .../session.py prepare --engagement gui-a --state-dir ...
-    uv run python .../session.py verify --engagement gui-a --state-dir ...
-    uv run python .../session.py stop --engagement gui-a
+    uv run python .../session.py verify --engagement gui-a
+    uv run python .../session.py stop --engagement gui-a --state-dir ...
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import secrets
 import subprocess
@@ -26,13 +32,29 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from relay import DEFAULT_CONTEXT, RelayError, resolve_engagement  # noqa: E402
+from relay import DEFAULT_CONTEXT, resolve_engagement  # noqa: E402
+from security import (  # noqa: E402
+    SecurityError,
+    ensure_private_directory,
+    remove_password_file,
+    write_password_file,
+)
+
+from haibox.errors import EngagementError  # noqa: E402
+from haibox.paths import validate_engagement_id  # noqa: E402
 
 DISPLAY = ":100"
 PORT = 14500
-PASSWORD_FILE = "/tmp/xpra-auth"
-LOG_FILE = "/tmp/xpra.log"
 RUNTIME_DIR = "/tmp/xpra-runtime"
+PASSWORD_FILE = f"{RUNTIME_DIR}/xpra-auth"
+LOG_FILE = "/tmp/xpra.log"
+
+DOCKER_TIMEOUT = 60.0
+PROBE_TIMEOUT = 10.0
+STOP_TIMEOUT = 30.0
+CLEANUP_TIMEOUT = 30.0
+PREPARE_WAIT = 30.0
+PASSWORD_BYTES = 24
 
 # Deny-by-default. Changing this list is a security decision, not a convenience.
 DISABLED_FLAGS = (
@@ -64,30 +86,162 @@ SERVER_ARGS = (
 )
 
 
-class SessionError(RuntimeError):
+class SessionError(SecurityError):
     """A safe, operator-facing session failure."""
 
 
 def _docker(
-    context: str, args: list[str], *, input_bytes: bytes | None = None, timeout: int = 60
+    context: str,
+    args: list[str],
+    *,
+    input_bytes: bytes | None = None,
+    timeout: float = DOCKER_TIMEOUT,
 ) -> subprocess.CompletedProcess[bytes]:
-    return subprocess.run(
-        ["docker", "--context", context, *args],
-        input=input_bytes,
-        capture_output=True,
-        timeout=timeout,
-        check=False,
-    )
+    try:
+        return subprocess.run(
+            ["docker", "--context", context, *args],
+            input=input_bytes,
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise SessionError(
+            f"docker {' '.join(args[:3])} timed out after {timeout:g}s"
+        ) from exc
+    except OSError as exc:
+        raise SessionError(f"cannot run docker: {exc}") from exc
 
 
 def _must(
-    context: str, args: list[str], *, input_bytes: bytes | None = None, timeout: int = 60
+    context: str,
+    args: list[str],
+    *,
+    input_bytes: bytes | None = None,
+    timeout: float = DOCKER_TIMEOUT,
 ) -> bytes:
     result = _docker(context, args, input_bytes=input_bytes, timeout=timeout)
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).decode("utf-8", "replace").strip()
-        raise SessionError(f"docker {' '.join(args[:3])} failed: {detail}")
+        raise SessionError(f"docker {' '.join(args[:3])} failed: {detail[:2000]}")
     return result.stdout
+
+
+def _password_path(state_dir: Path, engagement: str) -> Path:
+    """Build the host password path only from a validated engagement ID."""
+
+    try:
+        valid = validate_engagement_id(engagement)
+    except EngagementError as exc:
+        raise SessionError(str(exc)) from exc
+    return Path(state_dir).expanduser().absolute() / f"{valid}.password"
+
+
+def _reset_container_runtime(context: str, container: str) -> None:
+    _must(
+        context,
+        [
+            "exec",
+            container,
+            "sh",
+            "-c",
+            f"rm -rf {RUNTIME_DIR}; install -d -m 0700 {RUNTIME_DIR}; "
+            f"rm -f {PASSWORD_FILE}",
+        ],
+        timeout=DOCKER_TIMEOUT,
+    )
+
+
+def _write_container_password(context: str, container: str, password: str) -> None:
+    """Write the container password without argv exposure or symlink clobbering."""
+
+    _must(
+        context,
+        [
+            "exec",
+            "-i",
+            container,
+            "sh",
+            "-c",
+            f"umask 077; set -C; cat > {PASSWORD_FILE}",
+        ],
+        input_bytes=password.encode("utf-8"),
+        timeout=DOCKER_TIMEOUT,
+    )
+    _must(
+        context,
+        [
+            "exec",
+            container,
+            "sh",
+            "-c",
+            f'test -s {PASSWORD_FILE} && test "$(stat -c %a {PASSWORD_FILE})" = 600',
+        ],
+        timeout=DOCKER_TIMEOUT,
+    )
+
+
+def _cleanup_container(
+    context: str, container: str, *, stop_server: bool
+) -> None:
+    """Best-effort removal of the server, runtime directory, and password."""
+
+    if stop_server:
+        with contextlib.suppress(SecurityError):
+            _docker(
+                context,
+                [
+                    "exec",
+                    container,
+                    "env",
+                    f"XDG_RUNTIME_DIR={RUNTIME_DIR}",
+                    "HOME=/tmp",
+                    "xpra",
+                    "stop",
+                    DISPLAY,
+                ],
+                timeout=STOP_TIMEOUT,
+            )
+    with contextlib.suppress(SecurityError):
+        _docker(
+            context,
+            [
+                "exec",
+                container,
+                "sh",
+                "-c",
+                f"rm -f {PASSWORD_FILE}; rm -rf {RUNTIME_DIR}",
+            ],
+            timeout=CLEANUP_TIMEOUT,
+        )
+
+
+def _wait_for_listener(context: str, container: str) -> None:
+    deadline = time.monotonic() + PREPARE_WAIT
+    while time.monotonic() < deadline:
+        probe = _docker(
+            context,
+            [
+                "exec",
+                container,
+                "sh",
+                "-c",
+                f"timeout 2 socat -u /dev/null TCP:127.0.0.1:{PORT}",
+            ],
+            timeout=PROBE_TIMEOUT,
+        )
+        if probe.returncode == 0:
+            return
+        time.sleep(0.5)
+    log = _docker(
+        context,
+        ["exec", container, "tail", "-40", LOG_FILE],
+        timeout=PROBE_TIMEOUT,
+    )
+    raise SessionError(
+        "Xpra did not listen on container loopback: "
+        + log.stdout.decode("utf-8", "replace")[:4000]
+    )
 
 
 def prepare(
@@ -101,72 +255,47 @@ def prepare(
     container, _workspace = resolve_engagement(
         engagement, data_dir=data_dir, config_dir=config_dir, context=context
     )
+    password_path = _password_path(state_dir, engagement)
+
     state_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-    password = secrets.token_urlsafe(18)
-    password_path = state_dir / f"{engagement}.password"
-    password_path.write_text(password, encoding="utf-8")
-    password_path.chmod(0o600)
+    ensure_private_directory(state_dir, create=False)
+    password = secrets.token_urlsafe(PASSWORD_BYTES)
+    write_password_file(password_path, password)
 
-    version = _must(context, ["exec", container, "xpra", "--version"]).decode().strip()
-    if "6.5.4" not in version:
-        raise SessionError(f"unexpected Xpra version: {version}")
+    server_started = False
+    try:
+        version = _must(context, ["exec", container, "xpra", "--version"]).decode().strip()
+        if "6.5.4" not in version:
+            raise SessionError(f"unexpected Xpra version: {version}")
 
-    # Fresh runtime directory and password file inside the container.
-    _must(
-        context,
-        [
-            "exec",
-            container,
-            "sh",
-            "-c",
-            f"rm -rf {RUNTIME_DIR}; install -d -m 0700 {RUNTIME_DIR}; "
-            f"rm -f {PASSWORD_FILE}",
-        ],
-    )
-    _must(
-        context,
-        ["exec", "-i", container, "sh", "-c", f"umask 077; cat > {PASSWORD_FILE}"],
-        input_bytes=password.encode(),
-    )
+        _reset_container_runtime(context, container)
+        _write_container_password(context, container, password)
 
-    script = "exec " + " ".join(SERVER_ARGS) + f" > {LOG_FILE} 2>&1"
-    _must(
-        context,
-        [
-            "exec",
-            "-d",
-            container,
-            "env",
-            f"XDG_RUNTIME_DIR={RUNTIME_DIR}",
-            "HOME=/tmp",
-            "sh",
-            "-c",
-            script,
-        ],
-    )
-
-    deadline = time.monotonic() + 30
-    while time.monotonic() < deadline:
-        probe = _docker(
+        script = "exec " + " ".join(SERVER_ARGS) + f" > {LOG_FILE} 2>&1"
+        _must(
             context,
             [
                 "exec",
+                "-d",
                 container,
+                "env",
+                f"XDG_RUNTIME_DIR={RUNTIME_DIR}",
+                "HOME=/tmp",
                 "sh",
                 "-c",
-                f"timeout 2 socat -u /dev/null TCP:127.0.0.1:{PORT}",
+                script,
             ],
-            timeout=10,
+            timeout=DOCKER_TIMEOUT,
         )
-        if probe.returncode == 0:
-            break
-        time.sleep(0.5)
-    else:
-        log = _docker(context, ["exec", container, "tail", "-40", LOG_FILE])
-        raise SessionError(
-            "Xpra did not listen on container loopback: "
-            + log.stdout.decode("utf-8", "replace")
-        )
+        server_started = True
+        _wait_for_listener(context, container)
+    except BaseException:
+        try:
+            _cleanup_container(context, container, stop_server=server_started)
+        finally:
+            with contextlib.suppress(OSError, SecurityError):
+                remove_password_file(password_path)
+        raise
 
     return {
         "engagement": engagement,
@@ -275,28 +404,26 @@ def verify(
 def stop(
     engagement: str,
     *,
+    state_dir: Path,
     data_dir: str | None,
     config_dir: str | None,
     context: str,
 ) -> None:
-    container, _workspace = resolve_engagement(
-        engagement, data_dir=data_dir, config_dir=config_dir, context=context
-    )
-    _docker(
-        context,
-        [
-            "exec",
-            container,
-            "env",
-            f"XDG_RUNTIME_DIR={RUNTIME_DIR}",
-            "HOME=/tmp",
-            "xpra",
-            "stop",
-            DISPLAY,
-        ],
-        timeout=30,
-    )
-    _docker(context, ["exec", container, "sh", "-c", f"rm -f {PASSWORD_FILE}"], timeout=30)
+    """Stop Xpra and remove both password files, even when stop fails."""
+
+    password_path = _password_path(state_dir, engagement)
+    try:
+        container, _workspace = resolve_engagement(
+            engagement,
+            data_dir=data_dir,
+            config_dir=config_dir,
+            context=context,
+            require_gui_preflight=False,
+        )
+        _cleanup_container(context, container, stop_server=True)
+    finally:
+        with contextlib.suppress(OSError, SecurityError):
+            remove_password_file(password_path)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -328,12 +455,13 @@ def main(argv: list[str] | None = None) -> int:
         else:
             stop(
                 args.engagement,
+                state_dir=Path(args.state_dir),
                 data_dir=args.data_dir,
                 config_dir=args.config_dir,
                 context=args.context,
             )
             result = {"stopped": args.engagement}
-    except (RelayError, SessionError) as exc:
+    except SecurityError as exc:
         print(f"session: {exc}", file=sys.stderr)
         return 2
     print(json.dumps(result, indent=2, sort_keys=True))

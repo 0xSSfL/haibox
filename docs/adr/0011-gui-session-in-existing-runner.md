@@ -58,6 +58,14 @@ The relay:
   `haibox-<id>` container name, and rejects a mismatch;
 - verifies `haibox.managed=true` and `haibox.engagement=<id>` on the running
   container before listening;
+- fails closed unless the engagement uses the `isolated` network profile with
+  an empty `scope.allowed` and `scope.allowed_ports`, then verifies the observed
+  `HostConfig.NetworkMode` matches the engagement network;
+- binds the socket only inside an owner-controlled 0700 directory. If `--socket`
+  is omitted, `XDG_RUNTIME_DIR` must be set; there is no world-writable `/tmp`
+  fallback;
+- bounds Docker inspection (10 s), stream idle time (120 s), blocked stream
+  writes (10 s), and child shutdown (5 s wait, 2 s terminate, 2 s kill);
 - authenticates the local peer with `SO_PEERCRED` and accepts only the relay's
   own UID;
 - allows one Xpra stream at a time and refuses additional local clients without
@@ -75,16 +83,47 @@ container at startup and does not become a general TCP proxy.
 The Xpra server binds only `127.0.0.1:14500` inside the container and uses the
 file authentication module with a per-session random password written over
 stdin to a mode-0600 file. The password is passed to the server as a filename,
-never as a command-line value. The host holds the matching password in a
-mode-0600 file outside the workspace. The password is rotated when the session
-is prepared and removed when the session stops.
+never as a command-line value. The container password lives in a freshly
+created mode-0700 runtime directory, is written with `noclobber`, and its mode
+is checked after creation.
+
+The host holds the matching password in a mode-0600 file outside the workspace.
+The host file is created with `O_EXCL | O_NOFOLLOW` in a verified owner-owned
+0700 directory; a pre-existing symlink or non-regular file is refused. The
+password is rotated on every prepare, and both host and container copies are
+removed on stop and on failed prepare. A stale host copy is replaced only when
+it is a regular file.
 
 The relay's UID check and the Xpra password are independent controls. Neither
 is sufficient alone: the relay prevents other local users from reaching the
 container stream, and Xpra prevents an unauthenticated stream from controlling
 the display.
 
-### 4. Forwarding is deny-by-default
+### 4. Graphical applications share the runner's trust boundary
+
+Admitting a GUI does not add a sandbox between the graphical application and
+the rest of the engagement runner. Xpra and every application it starts run as
+the same container user, in the same mount and network namespaces, with the
+same capability set, workspace mount, scope file, and resource limits as
+terminal tools in that engagement.
+
+Consequences:
+
+- A GUI application can read and modify the entire writable workspace, read the
+  scope file, inspect Xpra's environment and process memory, read the Xpra
+  password file when it runs as the same user, connect to the container
+  loopback listener, inject input into another application in the same display,
+  kill the session, and consume the engagement's CPU and memory budget.
+- The Xpra password protects the host-to-container transport. It does not
+  isolate applications from each other inside the container.
+- GUI applications must be treated as trusted at the same level as any other
+  tool launched in the engagement. Do not run mutually untrusted applications
+  in one GUI session or assume that closing a window revokes their access.
+- A production design that needs per-application isolation requires a separate
+  trust domain (for example a separate display server and container), which is a
+  different architecture and is not approved by this ADR.
+
+### 5. Forwarding is deny-by-default
 
 The first implementation starts Xpra with all non-display features explicitly
 disabled:
@@ -105,7 +144,7 @@ must assert both the server argv and the negotiated client subsystem list, and
 must fail closed if a flag is missing or a subsystem appears. Tested flags and
 assertions are recorded in the verification evidence.
 
-### 5. GUI is restricted to the isolated network profile
+### 6. GUI is restricted to the isolated network profile
 
 The GUI is available only with the `isolated` network profile. It must not be
 used with external or LAN targets, with the prototype `scoped` profile, or with
@@ -117,20 +156,30 @@ A future `haibox gui` command must refuse to start when the engagement network
 is not `isolated`, or when the scope contains external targets. That refusal
 must be covered by a test; documentation alone is not enforcement.
 
-### 6. Lifecycle is engagement-scoped
+The prototype enforces this in both `relay.py` and `session.py` before any
+Docker inspection or password write. It also checks the observed container
+`NetworkMode` against the engagement network. Unit regression tests cover the
+`isolated` requirement, non-empty `allowed` and `allowed_ports`, preflight
+ordering, and a network-mode mismatch.
+
+### 7. Lifecycle is engagement-scoped
 
 Starting a GUI session is a state-changing action and must produce an audit
 entry. Stopping, failing to start, and refusing an invalid target must also be
 audited. Session state belongs to the engagement, not to a global daemon.
 
-The production design must define:
+The prototype currently removes the socket, Xpra child, host password, and
+container password on stop and on failed prepare. The production design must
+still define:
 
 - explicit `gui start`, `gui attach`, `gui stop`, and `gui status` semantics;
 - cleanup on container stop, container removal, engagement archive/destroy,
   host crash, and relay crash;
 - reconnection behaviour after a host client detach;
 - resource limits for the Xpra server and applications;
-- a fixed, documented host-client version policy.
+- a fixed, documented host-client version policy;
+- audit entries for start, attach, stop, refusal, and failure;
+- credential revocation that does not depend on the container still running.
 
 ## Rejected alternatives
 
@@ -192,15 +241,20 @@ until they are resolved:
    truncated stream tests, fixed resource limits, and a reviewed client/server
    version matrix are still required.
 3. **Relay productionization (F-03):** the prototype validates engagement
-   identity and cleans up, but production needs tested crash/reconnect paths,
-   backpressure limits, audit integration, and a restricted runtime seam rather
-   than prototype scripts.
+   identity, fail-closed network/scope preflight, and bounded cleanup, but
+   production needs tested crash/reconnect paths, backpressure limits, audit
+   integration, and a restricted runtime seam rather than prototype scripts.
 4. **Feature assertions (F-04):** the prototype checks the server argv and the
    negotiated client subsystems; production needs automated negative tests per
    disabled subsystem and a fail-closed configuration check at both ends.
-5. **Scope (F-05):** GUI remains isolated; external targets wait for M2.
-6. **Credentials (F-06):** generation, rotation, revocation, and log redaction
-   must be implemented in the production lifecycle.
+5. **Scope (F-05):** GUI remains isolated and the prototype now refuses
+   non-isolated profiles or non-empty target scope before inspect; external
+   targets wait for M2.
+6. **Credentials (F-06):** the prototype now creates host files with
+   `O_EXCL | O_NOFOLLOW` in a verified 0700 directory, writes the container
+   password in a private runtime directory, rotates on prepare, and removes
+   both copies on stop or failed prepare. Production still needs audited
+   revocation and log-redaction guarantees.
 7. **Packaging (F-07):** host-client distribution and server image packaging
    are undecided. Debian 13 has no suitable Xpra package in the recorded
    snapshot.
@@ -213,3 +267,10 @@ until they are resolved:
 
 Prototype evidence is recorded in
 [`docs/superpowers/poc/2026-11-11-xpra-gui-readiness.md`](../superpowers/poc/2026-11-11-xpra-gui-readiness.md).
+
+The 2026-11-12 hardening pass adds unit regressions for the fail-closed network
+and scope preflight, observed `NetworkMode` mismatch, private socket/host-file
+directories, symlink refusal, password rotation and stale-file removal, stop
+and failed-prepare cleanup, unsafe engagement IDs, Docker inspect timeout,
+stream idle/write bounds, and bounded child termination. These tests use fakes
+and do not replace real-Docker revalidation of the hardened scripts.

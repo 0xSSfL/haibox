@@ -165,3 +165,21 @@ Prototype evidence is in
 
 No production `haibox gui` command, `ContainerSpec` GUI field, or catalog image
 is added by this update.
+
+## Status update: 2026-11-12 prototype hardening
+
+A focused prototype pass corrected the failure paths found during review. It
+does not change the production decision: the scanner gate is still closed, and
+no GUI command, runtime field, or catalog image exists.
+
+| Finding | Change in the prototype | Evidence | Status |
+|---|---|---|---|
+| F-02 host client surface | Relay copies now use non-blocking reads/writes with a 120 s idle bound and a 10 s blocked-write bound; disconnect marks the stream done instead of waiting for a stalled peer. Hostile-stream and fuzz tests are still absent. | `test_relay_pump_idle_timeout_marks_stream_done`, `test_relay_pump_eof_marks_stream_done`, `test_relay_blocked_write_times_out` | Open; bounded, not adversarially tested |
+| F-03 relay authorization/lifecycle | Preflight rejects non-`isolated` networks and non-empty `allowed`/`allowed_ports` before Docker inspect; observed `HostConfig.NetworkMode` must match; inspect is limited to 10 s; child wait/terminate/kill are limited to 5/2/2 s; stream threads are joined with a 2 s bound. | `test_relay_preflight_*`, `test_resolve_engagement_*`, `test_docker_inspect_timeout_is_bounded`, `test_relay_child_cleanup_is_bounded` | Prototype hardened; production audit/crash/backpressure remains open |
+| F-05 scope | Enforcement is now fail-closed in both relay and session preflight, not only in documentation. | `test_relay_preflight_rejects_*`, `test_resolve_engagement_rejects_scope_before_docker_inspect` | Prototype enforced; external targets remain blocked until M2 |
+| F-06 credentials | Host files use `O_EXCL`/`O_NOFOLLOW`, mode 0600, and a verified 0700 parent. Container passwords live in a recreated 0700 runtime directory and are written with `noclobber`. Passwords rotate on prepare and are removed on stop, stop failure, and failed prepare. Unsafe engagement IDs are rejected before building a host path. | `test_password_file_*`, `test_private_directory_rejects_symlink`, `test_prepare_creates_private_host_file_and_rotates_secrets`, `test_prepare_failure_removes_stale_host_and_container_password`, `test_stop_removes_host_and_container_password_even_if_xpra_stop_fails` | Prototype hardened; audited production revocation and log redaction remain open |
+| Shared trust boundary | ADR-0011 and the evidence record now state that Xpra and its applications share the runner's user, workspace, network, capabilities, and resource budget. The password protects transport, not intra-container isolation. | ADR-0011 section 4; evidence record "Shared trust boundary" | Documented |
+
+These are fake-runtime unit regressions. The hardened scripts were not re-run
+against a real Docker endpoint in this pass, so they do not establish production
+security or close any production gate.

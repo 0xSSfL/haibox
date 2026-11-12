@@ -1,7 +1,7 @@
 # Xpra GUI readiness verification
 
 **Status:** Prototype verified; production feature not approved.  
-**Date:** 2026-11-11  
+**Date:** 2026-11-11; hardening evidence added 2026-11-12  
 **Decision record:** [ADR-0011](../../adr/0011-gui-session-in-existing-runner.md)  
 **Prior design review:** [2026-11-10 Desktop security review](../reviews/2026-11-10-haibox-desktop-security-review.md)
 
@@ -35,6 +35,7 @@ not changed. All prototype files live under `docs/superpowers/poc/`.
 | `docs/superpowers/poc/gui-image/packages.lock` | 502-package RPM inventory |
 | `docs/superpowers/poc/gui-relay/relay.py` | Engagement-bound Unix-socket relay |
 | `docs/superpowers/poc/gui-relay/session.py` | Xpra server prepare/verify/stop helper |
+| `docs/superpowers/poc/gui-relay/security.py` | Private directory and password-file helpers |
 
 `packages.lock` SHA-256:
 `5c87a0908d77144f8beff935097e220814f8d1802ba9bad658bac277642afe06`.
@@ -85,9 +86,13 @@ operator-supplied command.
 
 The Xpra server uses `--bind-tcp=127.0.0.1:14500,auth=file:filename=...`; the
 password is delivered over stdin to a mode-0600 file inside the container and is
-not present in argv. The host password file is mode 0600. The tested password
-length was 24 bytes for `gui-b` and 16 bytes for `gui-a`; both matched exactly
-with no trailing newline.
+not present in argv. The container path is
+`/tmp/xpra-runtime/xpra-auth`; the runtime directory is recreated with mode 0700,
+the write uses `noclobber`, and the helper checks the resulting mode. The host
+password file is created with `O_EXCL | O_NOFOLLOW` and mode 0600 in a verified
+owner-controlled 0700 state directory. The tested password length was 24 bytes
+for `gui-b` and 16 bytes for `gui-a`; both matched exactly with no trailing
+newline.
 
 Evidence:
 
@@ -201,6 +206,43 @@ pointer input forwarding: headless Weston provides no seat or input devices, and
 GTK logged `gdk_seat_get_keyboard`/`gdk_seat_get_pointer` assertions. A real
 Fedora Workstation Wayland session remains untested (F-08 partially closed).
 
+## Prototype hardening (2026-11-12)
+
+The relay and session scripts were revised without changing the approved
+architecture. The production CLI, runtime, `ContainerSpec`, and image catalog
+remain untouched.
+
+| Control | Implementation | Regression evidence |
+|---|---|---|
+| Fail-closed target preflight | `isolated` network and empty `allowed`/`allowed_ports` are required before Docker inspection; observed `HostConfig.NetworkMode` must match the engagement network | `test_relay_preflight_*`, `test_resolve_engagement_rejects_scope_before_docker_inspect`, `test_resolve_engagement_rejects_observed_network_mismatch` |
+| Host password creation | `O_EXCL`/`O_NOFOLLOW`, mode 0600 from creation, verified owner-owned 0700 parent, symlink/non-regular replacement refused | `test_password_file_is_private_and_rotation_replaces_content`, `test_password_file_refuses_symlink_without_touching_target`, `test_password_file_requires_private_parent`, `test_private_directory_rejects_symlink` |
+| Container password | Private `/tmp/xpra-runtime` recreated at 0700, `noclobber` write over stdin, mode checked after creation | `test_prepare_writes_container_password_in_private_runtime` |
+| Rotation and stale credentials | Every prepare rotates the password and replaces only a regular host file; stale container state is removed before writing | `test_prepare_creates_private_host_file_and_rotates_secrets`, `test_prepare_failure_removes_stale_host_and_container_password` |
+| Stop and failure cleanup | Host and container password files removed on stop, even when `xpra stop` fails; failed prepare removes both; unsafe engagement IDs are rejected before any path is built | `test_stop_removes_host_and_container_password_even_if_xpra_stop_fails`, `test_stop_rejects_unsafe_engagement_id_before_removing_anything`, `test_prepare_refuses_non_private_state_directory` |
+| Socket path | No `/tmp` fallback; `XDG_RUNTIME_DIR` or an explicit socket path must be inside an owner-controlled 0700 directory; existing paths are refused | `test_socket_path_requires_xdg_runtime_dir`, `test_socket_path_rejects_shared_parent`, `test_socket_path_accepts_private_parent`, `test_relay_refuses_existing_socket_path` |
+| Bounded relay I/O | Docker inspect 10 s, stream idle 120 s, blocked write 10 s, child wait/terminate/kill 5/2/2 s, non-blocking stream copies, disconnect marks the stream done | `test_docker_inspect_timeout_is_bounded`, `test_relay_pump_idle_timeout_marks_stream_done`, `test_relay_pump_eof_marks_stream_done`, `test_relay_blocked_write_times_out`, `test_relay_child_cleanup_is_bounded` |
+| Bounded session Docker calls | Every helper call carries a timeout and converts `TimeoutExpired` into a clean `SessionError` | `test_session_docker_timeout_is_reported` |
+
+The new tests are in `tests/unit/test_gui_prototype.py` and use fakes only. They
+do not re-run the hardened scripts against a real Docker endpoint; that
+revalidation remains required before any production claim.
+
+### Shared trust boundary
+
+The GUI does not create a new sandbox inside the runner. Xpra and every
+application it starts run as the same container user, with the same writable
+workspace and read-only scope file, network namespace, capability set, and
+resource limits as terminal tools in the engagement. A GUI application can read
+the Xpra password file when it runs as that user, connect to the loopback
+listener, inspect or signal Xpra, inject input into other applications in the
+same display, and read or modify everything in the workspace.
+
+The Xpra password protects the host-to-container transport only. Applications
+in one GUI session are trusted at the same level as anything else launched in
+that runner; do not run mutually untrusted applications there. Per-application
+isolation would require a separate trust domain and is not part of this design.
+See [ADR-0011 section 4](../../adr/0011-gui-session-in-existing-runner.md).
+
 ## Remaining blockers
 
 The prototype does not close F-02 through F-09:
@@ -212,8 +254,10 @@ The prototype does not close F-02 through F-09:
   code;
 - no automated negative test for each disabled forwarding feature;
 - external targets remain forbidden until M2 scope enforcement is complete;
-- credential rotation/revocation and log-redaction are not implemented in a
-  product lifecycle;
+- the prototype rotates and removes credentials, but audited revocation and
+  log-redaction are not implemented in a product lifecycle;
+- the hardened relay/session scripts have unit regressions but have not been
+  re-run against a real Docker endpoint;
 - server packaging for the Debian-based catalog and host-client distribution
   remain undecided;
 - container escape, compositor, and host-client vulnerabilities remain residual
@@ -236,6 +280,15 @@ uv run python docs/superpowers/poc/gui-relay/session.py prepare \
 uv run python docs/superpowers/poc/gui-relay/session.py verify \
   --engagement gui-a --data-dir /tmp/opencode/gui-readiness/data \
   --config-dir /tmp/opencode/gui-readiness/config
+
+# Stop the server and remove host/container password files
+uv run python docs/superpowers/poc/gui-relay/session.py stop \
+  --engagement gui-a --state-dir /tmp/opencode/gui-readiness \
+  --data-dir /tmp/opencode/gui-readiness/data \
+  --config-dir /tmp/opencode/gui-readiness/config
+
+# Regression checks for the hardened prototype (no Docker required)
+uv run pytest tests/unit/test_gui_prototype.py -q
 
 # Start the relay, then attach with the extracted host client
 uv run python docs/superpowers/poc/gui-relay/relay.py --engagement gui-a \

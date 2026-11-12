@@ -208,7 +208,10 @@ forwarding, and isolated-network restriction. The prototype passed Fedora 44 X11
 and headless-Wayland display/surface tests, plus authentication,
 cross-engagement, concurrency, detach, stop, and cleanup negatives. It did not
 pass the image vulnerability gate: Grype covers Fedora 44 but reports 4
-CRITICAL and 61 HIGH findings.
+CRITICAL and 61 HIGH findings. A 2026-11-12 hardening pass added fail-closed
+isolated/empty-scope preflight, private password and socket directories,
+credential rotation and removal, and bounded relay cleanup, covered by
+fake-runtime unit tests only.
 
 **Not started:**
 
