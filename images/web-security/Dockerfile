@@ -5,6 +5,13 @@
 #
 # The base image and every tool version are pinned. Debian packages come from a
 # snapshot so a rebuild does not silently pick up a different package set.
+#
+# The Go tools are rebuilt from their pinned upstream releases with the
+# vulnerable transitive dependencies replaced by their fixed versions.  The
+# upstream releases pin the vulnerable versions in their own go.mod, so the
+# patched module requirements are committed under gomod/ and are the pinned
+# build input.  The sources come from the Go module proxy, which is immutable
+# and verified against the Go checksum database.
 
 ARG DEBIAN_IMAGE=debian:13-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
 ARG DEBIAN_SNAPSHOT=20261108T000000Z
@@ -24,14 +31,121 @@ ENV CGO_ENABLED=0 \
     GOMAXPROCS=2 \
     GOFLAGS="-trimpath -buildvcs=false -p=2"
 
+# The patched module requirements live in gomod/.  They pin every direct and
+# indirect dependency of the tool, so the build resolves the same versions
+# every time.  "go mod tidy" must not run here: it would drop the upgrades
+# again because the tools do not import the affected modules directly.
+COPY gomod/ /build/gomod/
+
+# build_tool <name> <module> <version> <package-path>
+#
+# The module proxy serves the upstream source for the pinned release, and the
+# committed go.mod/go.sum replace the upstream requirement set with the fixed
+# versions.  The build then asserts the resulting binary's module metadata:
+# every fixed version must be present, and no vulnerable version may remain.
+#
+# "go version -m" prints the module version with its "v" prefix, so the
+# assertions accept an optional "v" and pass the bare version.
 RUN set -eux; \
-    go install "github.com/ffuf/ffuf/v2@${FFUF_VERSION}"; \
-    go install "github.com/OJ/gobuster/v3@${GOBUSTER_VERSION}"; \
-    go install "github.com/projectdiscovery/nuclei/v3/cmd/nuclei@${NUCLEI_VERSION}"; \
-    go install "github.com/projectdiscovery/httpx/cmd/httpx@${HTTPX_VERSION}"; \
-    go install "github.com/projectdiscovery/subfinder/v2/cmd/subfinder@${SUBFINDER_VERSION}"; \
-    go install "github.com/projectdiscovery/katana/cmd/katana@${KATANA_VERSION}"; \
-    go install "github.com/hahwul/dalfox/v2@${DALFOX_VERSION}"
+    build_tool() { \
+        name="$1"; module="$2"; version="$3"; path="$4"; \
+        mkdir -p /tmp/download && cd /tmp/download; \
+        if [ ! -f go.mod ]; then go mod init haibox.local/download; fi; \
+        src="$(go mod download -json "${module}@${version}" \
+              | sed -n 's/^[[:space:]]*"Dir":[[:space:]]*"\(.*\)",$/\1/p')"; \
+        if [ -z "${src}" ] || [ ! -d "${src}" ]; then \
+            echo "FATAL: ${module}@${version} was not downloaded"; exit 1; \
+        fi; \
+        rm -rf "/tmp/src/${name}"; \
+        mkdir -p "/tmp/src/${name}"; \
+        cp -a "${src}/." "/tmp/src/${name}/"; \
+        chmod -R u+w "/tmp/src/${name}"; \
+        cp "/build/gomod/${name}.go.mod" "/tmp/src/${name}/go.mod"; \
+        cp "/build/gomod/${name}.go.sum" "/tmp/src/${name}/go.sum"; \
+        cd "/tmp/src/${name}"; \
+        go build -mod=mod -trimpath -buildvcs=false -p=2 -o "/go/bin/${name}" "${path}"; \
+        go version -m "/go/bin/${name}" > "/tmp/${name}.modinfo"; \
+        grep -E "^[[:space:]]*dep[[:space:]]" "/tmp/${name}.modinfo"; \
+    }; \
+    assert_fixed() { \
+        name="$1"; module="$2"; version="$3"; \
+        if ! grep -E "^[[:space:]]*dep[[:space:]]+${module}[[:space:]]+v?${version}([[:space:]]|$)" \
+                "/tmp/${name}.modinfo" >/dev/null; then \
+            echo "FATAL: ${name} does not embed ${module} ${version}"; \
+            grep -E "^[[:space:]]*dep[[:space:]]+${module}[[:space:]]" \
+                "/tmp/${name}.modinfo" || true; \
+            exit 1; \
+        fi; \
+        echo "OK: ${name} embeds ${module} ${version}"; \
+    }; \
+    assert_absent() { \
+        name="$1"; module="$2"; version="$3"; \
+        if grep -E "^[[:space:]]*dep[[:space:]]+${module}[[:space:]]+v?${version}([[:space:]]|$)" \
+                "/tmp/${name}.modinfo" >/dev/null; then \
+            echo "FATAL: ${name} still embeds vulnerable ${module} ${version}"; \
+            exit 1; \
+        fi; \
+        echo "OK: ${name} does not embed ${module} ${version}"; \
+    }; \
+    build_tool ffuf      github.com/ffuf/ffuf/v2                "${FFUF_VERSION}"      . ; \
+    build_tool gobuster  github.com/OJ/gobuster/v3               "${GOBUSTER_VERSION}"  . ; \
+    build_tool nuclei    github.com/projectdiscovery/nuclei/v3   "${NUCLEI_VERSION}"    ./cmd/nuclei ; \
+    build_tool httpx     github.com/projectdiscovery/httpx        "${HTTPX_VERSION}"     ./cmd/httpx ; \
+    build_tool subfinder github.com/projectdiscovery/subfinder/v2 "${SUBFINDER_VERSION}" ./cmd/subfinder ; \
+    build_tool katana    github.com/projectdiscovery/katana       "${KATANA_VERSION}"    ./cmd/katana ; \
+    build_tool dalfox    github.com/hahwul/dalfox/v2              "${DALFOX_VERSION}"    . ; \
+    \
+    assert_fixed dalfox github.com/labstack/echo/v4 4.16.1 ; \
+    assert_absent dalfox github.com/labstack/echo/v4 4.15.2 ; \
+    assert_fixed katana github.com/jackc/pgx/v5 5.9.0 ; \
+    assert_absent katana github.com/jackc/pgx/v5 5.7.2 ; \
+    assert_fixed nuclei github.com/getkin/kin-openapi 0.149.0 ; \
+    assert_fixed nuclei github.com/go-git/go-git/v5 5.19.2 ; \
+    assert_fixed nuclei github.com/go-jose/go-jose/v4 4.1.6 ; \
+    assert_fixed nuclei google.golang.org/grpc 1.84.0 ; \
+    assert_absent nuclei google.golang.org/grpc 1.82.1 ; \
+    assert_fixed nuclei golang.org/x/net 0.62.0 ; \
+    assert_fixed nuclei golang.org/x/crypto 0.58.0 ; \
+    assert_fixed nuclei golang.org/x/text 0.43.0 ; \
+    assert_fixed nuclei golang.org/x/mod 0.41.0 ; \
+    assert_fixed nuclei golang.org/x/sys 0.49.0 ; \
+    assert_fixed nuclei github.com/klauspost/compress 1.18.7 ; \
+    assert_fixed httpx golang.org/x/net 0.62.0 ; \
+    assert_fixed httpx golang.org/x/crypto 0.58.0 ; \
+    assert_fixed httpx golang.org/x/text 0.43.0 ; \
+    assert_fixed httpx golang.org/x/sys 0.49.0 ; \
+    assert_fixed httpx github.com/klauspost/compress 1.18.7 ; \
+    assert_fixed subfinder golang.org/x/net 0.62.0 ; \
+    assert_fixed subfinder golang.org/x/crypto 0.58.0 ; \
+    assert_fixed subfinder golang.org/x/text 0.43.0 ; \
+    assert_fixed subfinder golang.org/x/sys 0.49.0 ; \
+    assert_fixed subfinder github.com/klauspost/compress 1.18.7 ; \
+    assert_fixed katana golang.org/x/net 0.62.0 ; \
+    assert_fixed katana golang.org/x/crypto 0.58.0 ; \
+    assert_fixed katana golang.org/x/text 0.43.0 ; \
+    assert_fixed katana golang.org/x/sys 0.49.0 ; \
+    assert_fixed katana github.com/klauspost/compress 1.18.7 ; \
+    assert_fixed gobuster golang.org/x/net 0.62.0 ; \
+    assert_fixed gobuster golang.org/x/crypto 0.58.0 ; \
+    assert_fixed gobuster golang.org/x/sys 0.49.0 ; \
+    assert_fixed ffuf golang.org/x/net 0.62.0 ; \
+    \
+    for info in /tmp/*.modinfo; do \
+        if grep -E "^[[:space:]]*dep[[:space:]]+(github.com/labstack/echo/v4[[:space:]]+v?4\.15\.2|github.com/jackc/pgx/v5[[:space:]]+v?5\.7\.2|google.golang.org/grpc[[:space:]]+v?1\.82\.1)" \
+                "$info" >/dev/null; then \
+            echo "FATAL: ${info} still embeds a vulnerable module version"; \
+            exit 1; \
+        fi; \
+    done; \
+    echo "OK: no binary embeds a vulnerable echo, pgx, or grpc version"; \
+    \
+    ffuf -V >/dev/null; \
+    gobuster --version >/dev/null; \
+    nuclei -version >/dev/null; \
+    httpx -version >/dev/null; \
+    subfinder -version >/dev/null; \
+    katana -version >/dev/null; \
+    dalfox version >/dev/null
 
 FROM ${DEBIAN_IMAGE}
 
