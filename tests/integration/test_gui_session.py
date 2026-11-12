@@ -69,6 +69,8 @@ def engagement(tmp_path) -> Iterator[tuple[EngagementManager, Paths, object]]:
     finally:
         with contextlib.suppress(HAIBOXError):
             manager.destroy(created.id, force=True)
+        with contextlib.suppress(HAIBOXError):
+            runtime.remove_container(f"haibox-{created.id}", force=True)
 
 
 def _running_container(runtime: DockerCli, paths: Paths, engagement) -> str:
