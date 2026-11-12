@@ -273,7 +273,9 @@ catalog image. While the prototype exists, these invariants hold:
     is reported and never signalled.
 15. The GUI transport is a Unix-domain socket in an owner-controlled 0700
     directory, and the session credential is a mode-0600 file that is rotated
-    on every prepare and removed on stop.
+    on every prepare. The host copy is removed on stop; the container copy and
+    the container runtime are removed only once the previous server's
+    termination is confirmed.
 
 ## 7. Known gaps
 

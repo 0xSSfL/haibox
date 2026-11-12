@@ -284,9 +284,11 @@ until they are resolved:
    targets wait for M2.
 6. **Credentials (F-06):** the prototype now creates host files with
    `O_EXCL | O_NOFOLLOW` in a verified 0700 directory, writes the container
-   password in a private runtime directory, rotates on prepare, and removes
-   both copies on stop or failed prepare. Production still needs audited
-   revocation and log-redaction guarantees.
+   password in a private runtime directory, rotates on prepare, removes the
+   host copy on stop and on failed prepare, and removes the container copy and
+   the container runtime only once the previous server's termination is
+   confirmed. Production still needs audited revocation and log-redaction
+   guarantees.
 7. **Packaging (F-07):** host-client distribution and server image packaging
    are undecided. Debian 13 has no suitable Xpra package in the recorded
    snapshot.

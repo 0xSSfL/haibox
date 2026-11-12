@@ -9,8 +9,10 @@ published port.
 
 Session preflight is the same as the relay: the engagement must use the
 ``isolated`` network profile and must not have external targets. Host password
-files are created with mode 0600 in an owner-controlled 0700 directory, and
-both host and container copies are removed on stop or failed prepare.
+files are created with mode 0600 in an owner-controlled 0700 directory. The
+host copy is removed on stop and on failed prepare; the container copy and the
+container runtime are removed only when the previous server's termination is
+confirmed.
 
 A session is only replaced after the previous server is confirmed terminated.
 The ``xpra stop`` exit code is advisory: termination is confirmed by an
@@ -335,6 +337,8 @@ def _verify_server_stopped(context: str, container: str) -> None:
             )
             time.sleep(min(STOP_POLL_INTERVAL, max(0.0, deadline - time.monotonic())))
             continue
+        if state.name != "stopped":
+            raise SessionError(f"unknown Xpra server state {state.name!r}")
         listener = _listener_state(context, container, timeout=probe_timeout)
         if listener == "ambiguous":
             raise SessionError(
@@ -366,6 +370,8 @@ def _stop_server(context: str, container: str) -> None:
         )
     if state.name == "foreign":
         _refuse_foreign(state)
+    if state.name not in ("stopped", "running"):
+        raise SessionError(f"unknown Xpra server state {state.name!r}")
 
     outcome = "xpra stop reported success"
     try:
