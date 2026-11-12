@@ -303,6 +303,33 @@ disabling it.
 The VPN gateway image is not built in M1. `vpn up` fails cleanly; transparent
 routing and the kill switch are not implemented.
 
+### 7.10 `gui`
+
+| Command | Purpose |
+|---|---|
+| `start [ID]` | Start a GUI session for an engagement. |
+| `attach [ID] [--socket PATH]` | Serve the session on a local Unix-domain socket. |
+| `stop [ID]` | Stop the session and remove both credential copies. |
+| `status [ID]` | Show the state of the session. |
+
+The GUI is **not enabled**. While the GUI image is experimental, every command
+refuses with a message that names the reason, for example:
+
+```text
+error: the GUI is not enabled: the GUI image haibox/gui:0.1.0 is experimental,
+not active; promote it in images/gui/manifest.yaml after the image gate is accepted
+```
+
+There is no user-facing flag that enables it. The gate is the status of the
+GUI image in the catalog the CLI resolves, which is an owner decision; an
+operator who can change that catalog can also change the gate, which is the
+same trust level as changing the image definition itself.
+
+`gui status` and `gui stop` are never gated, so an existing session can always
+be inspected and revoked. A GUI session also requires the engagement to use
+the `isolated` network profile, to have an empty external target scope, and to
+use the approved GUI image.
+
 ---
 
 ## 8. Images

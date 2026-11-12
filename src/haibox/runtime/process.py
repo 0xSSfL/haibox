@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from haibox.errors import RuntimeFailure
 
@@ -35,6 +36,49 @@ class ProcessResult:
         return self.returncode == 0
 
 
+class ProcessStream:
+    """A live subprocess with pipes for a bidirectional byte stream.
+
+    The caller owns the process: :meth:`close` shuts the pipes down and
+    reaps the child, and :meth:`terminate` asks the child to stop first.
+    """
+
+    def __init__(self, process: subprocess.Popen[bytes]) -> None:
+        self.process = process
+
+    @property
+    def stdin(self) -> Any:
+        return self.process.stdin
+
+    @property
+    def stdout(self) -> Any:
+        return self.process.stdout
+
+    def close(self) -> None:
+        for stream in (self.process.stdin, self.process.stdout):
+            if stream is None:
+                continue
+            with contextlib.suppress(OSError):
+                stream.close()
+        try:
+            self.process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            self.terminate()
+        except OSError:
+            pass
+
+    def terminate(self) -> None:
+        with contextlib.suppress(OSError):
+            self.process.terminate()
+        try:
+            self.process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            with contextlib.suppress(OSError):
+                self.process.kill()
+        except OSError:
+            pass
+
+
 class CommandRunner(Protocol):
     def run(
         self,
@@ -49,6 +93,10 @@ class CommandRunner(Protocol):
     def interactive(
         self, args: list[str], *, env: dict[str, str] | None = None
     ) -> int: ...
+
+    def stream(
+        self, args: list[str], *, env: dict[str, str] | None = None
+    ) -> ProcessStream: ...
 
     def which(self, program: str) -> str | None: ...
 
@@ -119,6 +167,24 @@ class SubprocessRunner:
         except FileNotFoundError as exc:
             raise RuntimeFailure(f"command not found: {command[0]}") from exc
         return completed.returncode
+
+    def stream(
+        self, args: list[str], *, env: dict[str, str] | None = None
+    ) -> ProcessStream:
+        command = [str(arg) for arg in args]
+        try:
+            process = subprocess.Popen(  # noqa: S603 - explicit argv, no shell
+                command,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                env=_base_env(env),
+            )
+        except FileNotFoundError as exc:
+            raise RuntimeFailure(f"command not found: {command[0]}") from exc
+        except PermissionError as exc:
+            raise RuntimeFailure(f"command is not executable: {command[0]}") from exc
+        return ProcessStream(process)
 
     def which(self, program: str) -> str | None:
         return shutil.which(program)
