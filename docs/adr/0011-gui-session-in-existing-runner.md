@@ -90,11 +90,11 @@ is checked after creation.
 The host holds the matching password in a mode-0600 file outside the workspace.
 The host file is created with `O_EXCL | O_NOFOLLOW` in a verified owner-owned
 0700 directory; a pre-existing symlink or non-regular file is refused. The
-password is rotated on every prepare, and both host and container copies are
-removed on stop and on failed prepare. A stale host copy is replaced only when
-it is a regular file. When the previous server cannot be confirmed stopped
-(see section 7.1), nothing inside the container is removed: the live server
-keeps its runtime and its credential, and the operation fails closed.
+password is rotated on every prepare. The host copy is removed on stop and on
+failed prepare, so a session cannot be re-attached; the container copy is
+removed only when the previous server's termination is confirmed (see section
+7.1), so a live server keeps the credential it is using. A stale host copy is
+replaced only when it is a regular file.
 
 The relay's UID check and the Xpra password are independent controls. Neither
 is sufficient alone: the relay prevents other local users from reaching the
@@ -196,10 +196,12 @@ The prototype therefore treats the `xpra stop` exit code as advisory only:
 - the credential is not replaced, the runtime is not reset, and no second
   server is started until the previous server is confirmed gone.
 
-The prototype currently removes the socket, Xpra child, host password, and
-container password on stop and on failed prepare, except when the previous
-server cannot be confirmed stopped: nothing inside the container is removed
-then, and the operation fails closed. The production design must
+The prototype currently removes the socket, Xpra child, and host password on
+stop and on failed prepare. The container password and the container runtime
+are removed only when the previous server's termination is confirmed; when it
+cannot be confirmed, nothing inside the container is removed, the live server
+keeps its runtime and its credential, and the operation fails closed. The
+production design must
 still define:
 
 - explicit `gui start`, `gui attach`, `gui stop`, and `gui status` semantics;

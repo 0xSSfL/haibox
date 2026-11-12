@@ -437,6 +437,44 @@ def test_stop_server_fails_closed_when_the_container_state_is_uncertain(
     assert not any("xpra stop" in command for command in commands)
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        b"",
+        b"not-json",
+        b"[]",
+        b'{"ours": "4242", "foreign": []}',
+        b'{"ours": [], "foreign": null}',
+    ],
+)
+def test_stop_server_fails_closed_on_unreadable_container_state(
+    fake_session: FakeDocker, fast_lifecycle: None, payload: bytes
+) -> None:
+    fake_session.scan_output = payload
+
+    with pytest.raises(session.SessionError, match="cannot confirm"):
+        session._stop_server("haibox", "haibox-gui-a")
+
+    commands = [" ".join(call["args"]) for call in fake_session.calls]
+    assert not any("xpra stop" in command for command in commands)
+
+
+def test_cleanup_leaves_the_container_runtime_when_the_server_survives(
+    session_state: Path, fake_session: FakeDocker, fast_lifecycle: None
+) -> None:
+    fake_session.server_pids = {4242}
+    fake_session.listener_open = True
+    fake_session.stop_stops_server = False
+
+    with pytest.raises(session.SessionError, match="left in place"):
+        session._cleanup_container("haibox", "haibox-gui-a", stop_server=True)
+
+    commands = [" ".join(call["args"]) for call in fake_session.calls]
+    assert not any("rm -rf" in command for command in commands)
+    assert not any("rm -f" in command for command in commands)
+    assert fake_session.server_pids == {4242}
+
+
 def test_stop_server_fails_closed_when_the_loopback_port_cannot_be_probed(
     fake_session: FakeDocker, fast_lifecycle: None
 ) -> None:
@@ -491,6 +529,19 @@ def test_server_scan_script_classifies_our_and_foreign_servers(tmp_path: Path) -
     )
     _write_cmdline(root, 300, ["/usr/bin/xterm", "-e", "sh"])
     _write_cmdline(root, 400, ["/usr/sbin/xpra", "stop", session.DISPLAY])
+    # A server rooted at a similar but different directory is not ours.
+    _write_cmdline(
+        root,
+        500,
+        [
+            "/usr/bin/python3",
+            "-sP",
+            "/usr/sbin/xpra",
+            "start",
+            session.DISPLAY,
+            f"--socket-dirs={session.RUNTIME_DIR}2",
+        ],
+    )
 
     result = subprocess.run(
         [sys.executable, "-c", session._server_scan_script(), str(root)],
@@ -501,7 +552,7 @@ def test_server_scan_script_classifies_our_and_foreign_servers(tmp_path: Path) -
     payload = json.loads(result.stdout.strip().splitlines()[-1])
 
     assert payload["ours"] == [100]
-    assert payload["foreign"] == [200]
+    assert payload["foreign"] == [200, 500]
     assert payload["uncertain"] is False
 
 
@@ -619,8 +670,8 @@ def test_prepare_failure_removes_stale_host_and_container_password(
     assert any(session.PASSWORD_FILE in command for command in cleanup)
 
 
-def test_stop_removes_host_and_container_password_even_if_xpra_stop_fails(
-    session_state: Path, fake_session: FakeDocker
+def test_stop_removes_both_password_files_when_the_stop_command_fails(
+    session_state: Path, fake_session: FakeDocker, fast_lifecycle: None
 ) -> None:
     password_path = session_state / "gui-a.password"
     security.write_password_file(password_path, "session-password")
@@ -641,6 +692,36 @@ def test_stop_removes_host_and_container_password_even_if_xpra_stop_fails(
         "rm -f" in command and session.PASSWORD_FILE in command
         for command in commands
     )
+
+
+def test_stop_keeps_the_container_runtime_when_the_server_survives(
+    session_state: Path, fake_session: FakeDocker, fast_lifecycle: None
+) -> None:
+    password_path = session_state / "gui-a.password"
+    security.write_password_file(password_path, "session-password")
+    fake_session.server_pids = {4242}
+    fake_session.listener_open = True
+    fake_session.stop_stops_server = False
+
+    with pytest.raises(session.SessionError, match="left in place"):
+        session.stop(
+            "gui-a",
+            state_dir=session_state,
+            data_dir=None,
+            config_dir=None,
+            context="haibox",
+        )
+
+    # The host copy is always removed so the session cannot be re-attached,
+    # but the live server keeps its container runtime and its credential.
+    assert not password_path.exists()
+    commands = [" ".join(call["args"]) for call in fake_session.calls]
+    assert not any("rm -rf" in command for command in commands)
+    assert not any(
+        "rm -f" in command and session.PASSWORD_FILE in command
+        for command in commands
+    )
+    assert fake_session.server_pids == {4242}
 
 
 def test_stop_rejects_unsafe_engagement_id_before_removing_anything(

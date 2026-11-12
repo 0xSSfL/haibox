@@ -34,6 +34,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import NamedTuple
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO_ROOT / "src"))
@@ -98,6 +99,62 @@ class SessionError(SecurityError):
     """A safe, operator-facing session failure."""
 
 
+class ServerState(NamedTuple):
+    """What the container reports about the Xpra server on the display.
+
+    ``name`` is one of ``stopped``, ``running`` (this engagement's server),
+    ``foreign`` (another Xpra server on the same display), or ``ambiguous``
+    (the state could not be determined). An ambiguous state is never treated
+    as stopped.
+    """
+
+    name: str
+    pids: tuple[int, ...] = ()
+    reason: str = ""
+
+
+def _server_state(
+    context: str, container: str, *, timeout: float = PROBE_TIMEOUT
+) -> ServerState:
+    """Report the Xpra server state for this display inside the container."""
+
+    try:
+        result = _docker(
+            context,
+            ["exec", container, "python3", "-c", _server_scan_script(), "/proc"],
+            timeout=timeout,
+        )
+    except SessionError:
+        return ServerState("ambiguous", reason="the container could not be inspected")
+    if result.returncode != 0:
+        return ServerState("ambiguous", reason="the container could not be inspected")
+    lines = [
+        line for line in result.stdout.decode("utf-8", "replace").splitlines() if line.strip()
+    ]
+    if not lines:
+        return ServerState("ambiguous", reason="the container reported no server state")
+    try:
+        payload = json.loads(lines[-1])
+    except json.JSONDecodeError:
+        return ServerState("ambiguous", reason="the container reported unreadable server state")
+    if not isinstance(payload, dict):
+        return ServerState("ambiguous", reason="the container reported unreadable server state")
+    ours = payload.get("ours")
+    foreign = payload.get("foreign")
+    if not isinstance(ours, list) or not isinstance(foreign, list):
+        return ServerState("ambiguous", reason="the container reported unreadable server state")
+    if payload.get("uncertain"):
+        return ServerState("ambiguous", reason="a container process could not be inspected")
+    if foreign:
+        # A foreign server is reported even when this engagement's own server
+        # is running: the stop request targets the display, and a session that
+        # does not belong to this engagement must never be signalled.
+        return ServerState("foreign", tuple(foreign))
+    if ours:
+        return ServerState("running", tuple(ours))
+    return ServerState("stopped")
+
+
 # Read-only process scan used to prove that the previous Xpra server is gone.
 # It matches the argv of an Xpra *server* for this display, so it never
 # matches the scanning process itself and never matches an unrelated tool.
@@ -112,11 +169,15 @@ class SessionError(SecurityError):
 _SERVER_SCAN = r"""
 import json
 import os
+import re
 import sys
 
 root = sys.argv[1] if len(sys.argv) > 1 else "/proc"
 display = %s
 runtime = %s
+# The runtime directory must appear as a complete path segment, so a server
+# rooted at a different directory is never mistaken for this engagement's.
+runtime_pattern = re.compile(r"(?:^|[=/])" + re.escape(runtime) + r"(?:/|$)")
 ours = []
 foreign = []
 uncertain = False
@@ -144,7 +205,7 @@ for entry in os.listdir(root):
             break
         if argv[index + 1] != "start" or argv[index + 2] != display:
             continue
-        if any(runtime in element for element in argv):
+        if any(runtime_pattern.search(element) for element in argv):
             ours.append(pid)
         else:
             foreign.append(pid)
@@ -206,52 +267,6 @@ def _password_path(state_dir: Path, engagement: str) -> Path:
     return Path(state_dir).expanduser().absolute() / f"{valid}.password"
 
 
-def _server_state(
-    context: str, container: str, *, timeout: float = PROBE_TIMEOUT
-) -> tuple[str, dict[str, object]]:
-    """Report the Xpra server state for this display inside the container.
-
-    Returns ``stopped``, ``running`` (this engagement's server), ``foreign``
-    (another Xpra server on the same display), or ``ambiguous`` when the state
-    cannot be determined. An ambiguous state is never treated as stopped.
-    """
-
-    try:
-        result = _docker(
-            context,
-            ["exec", container, "python3", "-c", _server_scan_script(), "/proc"],
-            timeout=timeout,
-        )
-    except SessionError:
-        return "ambiguous", {"reason": "the container could not be inspected"}
-    if result.returncode != 0:
-        return "ambiguous", {"reason": "the container could not be inspected"}
-    lines = [
-        line for line in result.stdout.decode("utf-8", "replace").splitlines() if line.strip()
-    ]
-    if not lines:
-        return "ambiguous", {"reason": "the container reported no server state"}
-    try:
-        payload = json.loads(lines[-1])
-    except json.JSONDecodeError:
-        return "ambiguous", {"reason": "the container reported unreadable server state"}
-    if not isinstance(payload, dict):
-        return "ambiguous", {"reason": "the container reported unreadable server state"}
-    ours = payload.get("ours")
-    foreign = payload.get("foreign")
-    if not isinstance(ours, list) or not isinstance(foreign, list):
-        return "ambiguous", {"reason": "the container reported unreadable server state"}
-    if payload.get("uncertain"):
-        return "ambiguous", {"reason": "a container process could not be inspected"}
-    if foreign:
-        # A foreign server is reported even when this engagement's own server
-        # is running: a stop request for the display could reach it too.
-        return "foreign", {"pids": foreign}
-    if ours:
-        return "running", {"pids": ours}
-    return "stopped", {}
-
-
 def _listener_state(
     context: str, container: str, *, timeout: float = PROBE_TIMEOUT
 ) -> str:
@@ -279,6 +294,15 @@ def _listener_state(
     return "ambiguous"
 
 
+def _refuse_foreign(state: ServerState) -> None:
+    """Raise when a server on the display does not belong to this engagement."""
+
+    raise SessionError(
+        f"another Xpra server owns display {DISPLAY} (pids {list(state.pids)}); "
+        "refusing to stop a session that this engagement does not own"
+    )
+
+
 def _verify_server_stopped(context: str, container: str) -> None:
     """Fail closed unless the previous Xpra server is confirmed terminated.
 
@@ -295,23 +319,19 @@ def _verify_server_stopped(context: str, container: str) -> None:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise SessionError(f"{pending} within {STOP_VERIFY_TIMEOUT:g}s")
-        probe_timeout = max(0.5, min(PROBE_TIMEOUT, remaining))
-        state, details = _server_state(context, container, timeout=probe_timeout)
-        if state == "ambiguous":
+        probe_timeout = max(0.05, min(PROBE_TIMEOUT, remaining))
+        state = _server_state(context, container, timeout=probe_timeout)
+        if state.name == "ambiguous":
             raise SessionError(
                 "cannot confirm that the previous Xpra server stopped: "
-                f"{details.get('reason', 'unknown reason')}"
+                f"{state.reason or 'unknown reason'}"
             )
-        if state == "foreign":
-            raise SessionError(
-                f"another Xpra server owns display {DISPLAY} "
-                f"(pids {details.get('pids', [])}); refusing to stop a session "
-                "that this engagement does not own"
-            )
-        if state == "running":
+        if state.name == "foreign":
+            _refuse_foreign(state)
+        if state.name == "running":
             pending = (
                 f"the previous Xpra server on display {DISPLAY} is still running "
-                f"(pids {details.get('pids', [])})"
+                f"(pids {list(state.pids)})"
             )
             time.sleep(min(STOP_POLL_INTERVAL, max(0.0, deadline - time.monotonic())))
             continue
@@ -338,18 +358,14 @@ def _stop_server(context: str, container: str) -> None:
     on this display and for a listener on the container loopback port.
     """
 
-    state, details = _server_state(context, container)
-    if state == "ambiguous":
+    state = _server_state(context, container)
+    if state.name == "ambiguous":
         raise SessionError(
             "cannot confirm that the previous Xpra server stopped: "
-            f"{details.get('reason', 'unknown reason')}"
+            f"{state.reason or 'unknown reason'}"
         )
-    if state == "foreign":
-        raise SessionError(
-            f"another Xpra server owns display {DISPLAY} "
-            f"(pids {details.get('pids', [])}); refusing to stop a session "
-            "that this engagement does not own"
-        )
+    if state.name == "foreign":
+        _refuse_foreign(state)
 
     outcome = "xpra stop reported success"
     try:
@@ -666,7 +682,13 @@ def stop(
     config_dir: str | None,
     context: str,
 ) -> None:
-    """Stop Xpra and remove both password files, even when stop fails."""
+    """Stop Xpra and remove the credentials.
+
+    The host copy is always removed, so the session cannot be re-attached.
+    The container copy and the container runtime are removed only when the
+    server's termination is confirmed; when it is not, the operation fails
+    closed and the live server keeps its runtime and its credential.
+    """
 
     password_path = _password_path(state_dir, engagement)
     try:
