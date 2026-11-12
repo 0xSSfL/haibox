@@ -28,10 +28,16 @@ ENV LANG=C.UTF-8 \
 # direct packages are installed, so the image carries the fixed library
 # versions (pcre2 10.49, python3-pillow 13.0.0) that close the findings the
 # previous Fedora 44 fixture carried.
+#
+# python3-gobject is required by the Xpra server itself: without the GObject
+# introspection bindings the server exits with "the python gobject
+# introspection bindings are missing" before it binds its display.  That was
+# found by running the server in the container, not by reading the manifest.
 RUN set -eux; \
     dnf -y upgrade --refresh; \
     dnf -y install --setopt=install_weak_deps=False \
         xpra-6.5.6-1.fc46 \
+        python3-gobject-3.58.1-6.fc46 \
         xterm-411-1.fc46 \
         xorg-x11-server-Xvfb-21.1.26-1.fc46 \
         socat-1.8.1.3-1.fc46; \

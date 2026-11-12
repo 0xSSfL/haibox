@@ -76,18 +76,37 @@ normal catalog tooling.
 | Item | Value |
 |---|---|
 | Base | `fedora:46@sha256:78bb31de333664aa76c4bf54306791cd294c0bd4fbcfc4346e2286261de544c4` |
-| Direct packages | `xpra-6.5.6-1.fc46`, `xterm-411-1.fc46`, `xorg-x11-server-Xvfb-21.1.26-1.fc46`, `socat-1.8.1.3-1.fc46` |
+| Direct packages | `xpra-6.5.6-1.fc46`, `python3-gobject-3.58.1-6.fc46`, `xterm-411-1.fc46`, `xorg-x11-server-Xvfb-21.1.26-1.fc46`, `socat-1.8.1.3-1.fc46` |
 | Runtime user | UID/GID `1000:1000` (`haibox`), non-root |
-| Installed RPMs | 376 (the previous fixture had 502) |
+| Installed RPMs | 379 (the previous fixture had 502) |
 | Image size | 1.21 GB (the previous fixture had 1.40 GB) |
 | Build | `uv run haibox image build gui` → `haibox/gui:0.1.0` |
 | Verification | `uv run haibox image verify gui` → passed (manifest commands run as uid 65534 with no network) |
 | Scan | `uv run haibox image scan gui` → **0 HIGH/CRITICAL**, exit 0 |
+| Image digest | `sha256:c504dfb334f5661084abf770f3ded63aace6ec5c4ca26dbad18c3646cc271c39` |
+| Package inventory SHA-256 | `da494a803004e00c10e5bc8073b2fe7050bb2e9b6c451167e93bc74f67201d54` |
 | Package inventory | [`images/gui/packages.lock`](../../../images/gui/packages.lock) |
 
-The image is deliberately smaller than the prototype fixture: the GTK client
-bindings (`python3-gobject`) are not needed on the server side, weak
-dependencies are disabled, and the package manager caches are removed.
+The image is deliberately smaller than the prototype fixture: weak
+dependencies are disabled and the package manager caches are removed.
+
+### A defect the real run found
+
+The first candidate dropped `python3-gobject`, which the prototype fixture
+carried. Building and scanning the image did not reveal the problem: the image
+scanned clean. Running the Xpra server inside the container did:
+
+```text
+the python gobject introspection bindings are missing:
+cannot import name 'repository' from 'gi' (unknown location)
+```
+
+The Xpra server needs the GObject introspection bindings and exits before it
+binds its display. The image now installs `python3-gobject-3.58.1-6.fc46`
+explicitly, and the manifest verifies it with
+`python3 -c "import gi; gi.require_version('Gtk', '3.0')"`. The lesson is
+recorded here because it is the reason the program insists on running the
+server in the container rather than trusting a green scan.
 
 ## Rejected alternative: rebuilding Pillow on a stable base
 

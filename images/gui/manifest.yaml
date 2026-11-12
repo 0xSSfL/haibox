@@ -12,6 +12,9 @@ tools:
   - name: xpra
     version: 6.5.6-1.fc46
     verify: xpra --version
+  - name: python3-gobject
+    version: 3.58.1-6.fc46
+    verify: python3 -c "import gi; gi.require_version('Gtk', '3.0')"
   - name: xterm
     version: 411-1.fc46
     verify: xterm -version

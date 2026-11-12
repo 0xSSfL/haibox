@@ -308,6 +308,9 @@ publicsuffix-list-dafsa-20260624-2.fc45
 pulseaudio-libs-17.0-11.fc46
 python-pip-wheel-26.3-1.fc46
 python3-3.15.2-1.fc46
+python3-cairo-1.28.0-8.fc45
+python3-gobject-3.58.1-6.fc46
+python3-gobject-base-3.58.1-6.fc46
 python3-libs-3.15.2-1.fc46
 python3-lz4-4.4.4-7.fc45
 python3-olefile-0.47-15.fc45
