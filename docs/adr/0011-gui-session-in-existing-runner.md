@@ -1,6 +1,10 @@
 # ADR-0011: Optional GUI sessions in the existing engagement runner
 
 - Status: Proposed; prototyping direction accepted, production implementation not approved
+- Update (2026-11-12): the runtime and the `haibox gui` commands are implemented,
+  but the commands refuse to run while the GUI image is experimental, so no
+  production GUI ships. Enabling them requires an owner decision on the image
+  base and a promotion of the GUI image in `images/gui/manifest.yaml`.
 - Date: 2026-11-11
 - Related: ADR-0003 (scope enforcement), ADR-0008 (isolated network), ADR-0009 (no legacy internal profile), ADR-0010 (scoped profile), PR #8 design review
 
@@ -16,8 +20,14 @@ HAIBOX engagement. It left two questions open:
 
 The review recorded blocking findings F-01 through F-09. This ADR resolves the
 lifecycle question and fixes the security contract for the first prototype. It
-does not approve a production feature, add a `haibox gui` command, add GUI
-fields to `ContainerSpec`, or add a catalog image.
+does not approve a production feature, add GUI fields to `ContainerSpec`, or
+publish a catalog image.
+
+The 2026-11-12 implementation adds the runtime in `src/haibox/gui/` and the
+`haibox gui start|attach|stop|status` commands. The commands are gated: while
+the GUI image is experimental they refuse with a message that names the
+reason, and no flag or environment variable can bypass the gate. The gate is
+the catalog status of the GUI image, which is an owner decision.
 
 ## Decision
 
@@ -262,13 +272,15 @@ Rejected. ADR-0009 removed it. GUI support does not justify reintroducing it.
 
 ## Open gates
 
-This ADR does **not** close the following, and no production command may ship
+This ADR does **not** close the following, and no production GUI may ship
 until they are resolved:
 
 1. **Scanner gate (F-01):** the disposable Fedora 44 fixture is covered by
-   Grype after Trivy rejects the unsupported OS, but the scan currently reports
-   4 CRITICAL and 61 HIGH findings. The gate is closed. A production image must
-   reduce or justify these findings under the normal image policy.
+   Grype after Trivy rejects the unsupported OS, and it reported 4 CRITICAL and
+   61 HIGH findings. A replacement image on Fedora 46 now reports **0
+   HIGH/CRITICAL** through the same pipeline, but its base is still a
+   pre-release snapshot: the image must be rebuilt on the stable release and
+   rescanned before it can be called production-qualifiable.
 2. **Host client and protocol hardening (F-02):** hostile, malformed, and
    truncated stream tests, fixed resource limits, and a reviewed client/server
    version matrix are still required.
@@ -301,6 +313,13 @@ until they are resolved:
 
 Prototype evidence is recorded in
 [`docs/superpowers/poc/2026-11-11-xpra-gui-readiness.md`](../superpowers/poc/2026-11-11-xpra-gui-readiness.md).
+
+The runtime in `src/haibox/gui/` and the gated `haibox gui` commands were
+verified against a real Docker endpoint on 2026-11-12 with the scanned GUI
+image: prepare, verify, credential rotation, foreign-server refusal without
+signalling, and stop cleanup all behaved as specified, and the Fedora 44 Xpra
+6.5.4 host client attached through the relay and produced a native X11 window
+against the Fedora 46 Xpra 6.5.6 server.
 
 The 2026-11-12 hardening pass adds unit regressions for the fail-closed network
 and scope preflight, canonical scope-file comparison, additional/missing network

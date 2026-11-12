@@ -50,7 +50,22 @@ class GuiRelay:
         self._workers: list[threading.Thread] = []
 
     # ------------------------------------------------------------------ setup
+    def _verify_container(self) -> None:
+        """Refuse a container that is not this engagement's managed runner."""
+
+        info = self.runtime.inspect_container(self.spec.container)
+        if not info.managed:
+            raise GuiRelayError(f"container {self.spec.container!r} is not HAIBOX-managed")
+        if info.engagement != self.spec.engagement_id:
+            raise GuiRelayError(
+                f"container {self.spec.container!r} does not belong to "
+                f"engagement {self.spec.engagement_id!r}"
+            )
+        if not info.running:
+            raise GuiRelayError(f"container {self.spec.container!r} is not running")
+
     def _listen(self) -> socket.socket:
+        self._verify_container()
         try:
             ensure_private_directory(self.socket_path.parent)
         except GuiCredentialError as exc:
@@ -230,6 +245,9 @@ class GuiRelay:
                     ready, _, _ = select.select([listener], [], [], 0.5)
                 except InterruptedError:
                     continue
+                except (OSError, ValueError):
+                    # The listener was closed while we were waiting.
+                    break
                 if not ready:
                     continue
                 try:

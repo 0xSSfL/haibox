@@ -19,7 +19,7 @@ from haibox.cli.gui_cmd import GuiNotEnabled, gui_enabled
 from haibox.engagement import EngagementManager
 from haibox.gui.errors import GuiPreflightError
 from haibox.models import Scope
-from haibox.runtime.base import ContainerInfo
+from haibox.runtime.base import ContainerInfo, ExecResult
 from tests.conftest import invoke
 
 CATALOG = Path(__file__).resolve().parents[2] / "images"
@@ -143,6 +143,9 @@ def test_gui_status_works_when_the_image_is_active(
         name="Demo",
         scope=Scope(),
         image="haibox/gui:0.1.0",
+        cpus=2.0,
+        memory="2g",
+        pids_limit=512,
         uid=1000,
         gid=1000,
     )
@@ -159,6 +162,16 @@ def test_gui_status_works_when_the_image_is_active(
         network_mode=engagement.runtime.network_name,
         networks=(engagement.runtime.network_name,),
     )
+
+    cli.exec_results = [
+        ExecResult(
+            exit_code=0,
+            stdout=json.dumps(
+                {"ours": [], "foreign": [], "stoppers": [], "argv": {}, "uncertain": False}
+            ),
+            stderr="",
+        )
+    ]
 
     result = invoke(cli_runner, paths, "--json", "gui", "status", "demo")
 
@@ -178,6 +191,9 @@ def test_gui_status_refuses_an_engagement_with_external_targets(
         name="Demo",
         scope=Scope(allowed=["10.10.20.5"]),
         image="haibox/gui:0.1.0",
+        cpus=2.0,
+        memory="2g",
+        pids_limit=512,
         uid=1000,
         gid=1000,
     )

@@ -10,6 +10,7 @@ evidence for the same requirements is recorded in the evidence document.
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import json
 import socket
 import stat
@@ -139,6 +140,9 @@ class _HostileRuntime(FakeRuntime):
     ) -> ExecResult:
         self._record("exec_capture", name, tuple(command), timeout)
         joined = " ".join(command)
+        if joined.startswith("sh -c kill "):
+            # A terminated stop request is gone.
+            self.stopper_pids = set()
         if "python3" in command and "-c" in command:
             return ExecResult(
                 exit_code=0,
@@ -166,6 +170,26 @@ class _HostileRuntime(FakeRuntime):
         return ExecResult(exit_code=0, stdout="", stderr="")
 
 
+def _relay_runtime(engagement: Engagement) -> FakeRuntime:
+    """A fake runtime with the engagement's own managed container."""
+
+    runtime = FakeRuntime()
+    runtime.containers[engagement.runtime.container_name] = ContainerInfo(
+        id="fake-0001",
+        name=engagement.runtime.container_name,
+        image=engagement.image,
+        state="running",
+        status="Up",
+        labels={
+            "haibox.managed": "true",
+            "haibox.engagement": engagement.id,
+        },
+        network_mode=engagement.runtime.network_name,
+        networks=(engagement.runtime.network_name,),
+    )
+    return runtime
+
+
 def _manager(
     paths: Paths,
     runtime: FakeRuntime,
@@ -187,7 +211,11 @@ def test_relay_survives_a_hostile_byte_stream(tmp_path: Path) -> None:
     private = tmp_path / "runtime"
     private.mkdir(mode=0o700)
     engagement = _engagement()
-    relay = GuiRelay(FakeRuntime(), GuiSessionSpec.from_engagement(engagement), private / "g.sock")
+    relay = GuiRelay(
+        _relay_runtime(engagement),
+        GuiSessionSpec.from_engagement(engagement),
+        private / "g.sock",
+    )
     listener = relay._listen()
     server, client = socket.socketpair()
     try:
@@ -561,3 +589,82 @@ def test_no_stop_request_is_sent_when_no_server_is_running(paths: Paths) -> None
 
     commands = [" ".join(str(part) for part in call[1]) for call in runtime.calls]
     assert not any("xpra stop" in command for command in commands)
+
+
+def test_the_relay_refuses_a_container_it_does_not_own(paths: Paths) -> None:
+    """The relay checks the container before it binds a socket."""
+
+    private = paths.logs_dir / "gui"
+    private.mkdir(parents=True, exist_ok=True)
+    private.chmod(0o700)
+    engagement = _engagement()
+    runtime = _relay_runtime(engagement)
+    runtime.containers[engagement.runtime.container_name] = dataclasses.replace(
+        runtime.containers[engagement.runtime.container_name],
+        labels={"haibox.managed": "true", "haibox.engagement": OTHER_ID},
+    )
+    relay = GuiRelay(runtime, GuiSessionSpec.from_engagement(engagement), private / "g.sock")
+
+    with pytest.raises(GuiRelayError, match="does not belong"):
+        relay._listen()
+
+    assert not (private / "g.sock").exists()
+
+
+def test_the_session_budget_is_enforced(paths: Paths) -> None:
+    """An engagement may not ask for more than the GUI session budget."""
+
+    engagement = _engagement()
+    runtime = _HostileRuntime(engagement, paths)
+    greedy = engagement.model_copy(
+        update={
+            "runtime": engagement.runtime.model_copy(update={"cpus": 16.0}),
+        }
+    )
+    manager = _manager(paths, runtime, greedy)
+
+    with pytest.raises(GuiPreflightError, match="above the GUI session budget"):
+        manager.status(ENGAGEMENT_ID)
+
+
+def test_the_deny_list_cannot_be_widened_or_narrowed() -> None:
+    """The forwarding deny list is fixed."""
+
+    with pytest.raises(ValidationError):
+        GuiSessionSpec(
+            engagement_id=ENGAGEMENT_ID,
+            container=CONTAINER,
+            image=IMAGE,
+            server_flags=("--clipboard=yes",),
+        )
+    with pytest.raises(ValidationError):
+        GuiSessionSpec(
+            engagement_id=ENGAGEMENT_ID,
+            container=CONTAINER,
+            image=IMAGE,
+            server_flags=(),
+        )
+    with pytest.raises(ValidationError):
+        GuiSessionSpec(
+            engagement_id=ENGAGEMENT_ID,
+            container=CONTAINER,
+            image=IMAGE,
+            runtime_dir="/tmp/somewhere-else",
+        )
+
+
+def test_the_runtime_paths_are_fixed() -> None:
+    with pytest.raises(ValidationError):
+        GuiSessionSpec(
+            engagement_id=ENGAGEMENT_ID,
+            container=CONTAINER,
+            image=IMAGE,
+            log_file="/tmp/other.log",
+        )
+    with pytest.raises(ValidationError):
+        GuiSessionSpec(
+            engagement_id=ENGAGEMENT_ID,
+            container=CONTAINER,
+            image=IMAGE,
+            password_file="/tmp/other.password",
+        )

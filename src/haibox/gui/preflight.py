@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from haibox.errors import ScopeError
 from haibox.gui.errors import GuiPreflightError
-from haibox.gui.spec import GuiSessionSpec
+from haibox.gui.spec import GuiLimits, GuiSessionSpec
 from haibox.models import Engagement
 from haibox.paths import Paths
 from haibox.runtime.base import ContainerInfo, ContainerRuntime
@@ -47,12 +47,45 @@ def verify_scope(engagement: Engagement, paths: Paths) -> None:
         )
 
 
+def verify_limits(engagement: Engagement, limits: GuiLimits) -> None:
+    """Refuse an engagement whose container exceeds the GUI session budget."""
+
+    runtime = engagement.runtime
+    if runtime.cpus > limits.cpus:
+        raise GuiPreflightError(
+            f"engagement {engagement.id!r} requests {runtime.cpus} CPUs, which is "
+            f"above the GUI session budget of {limits.cpus}"
+        )
+    if runtime.pids_limit > limits.pids_limit:
+        raise GuiPreflightError(
+            f"engagement {engagement.id!r} requests {runtime.pids_limit} processes, "
+            f"which is above the GUI session budget of {limits.pids_limit}"
+        )
+    if _memory_bytes(runtime.memory) > _memory_bytes(limits.memory):
+        raise GuiPreflightError(
+            f"engagement {engagement.id!r} requests {runtime.memory} of memory, "
+            f"which is above the GUI session budget of {limits.memory}"
+        )
+
+
+def _memory_bytes(value: str) -> int:
+    text = value.strip().lower()
+    if text.endswith("g"):
+        return int(text[:-1]) * 1024 * 1024 * 1024
+    if text.endswith("m"):
+        return int(text[:-1]) * 1024 * 1024
+    if text.endswith("k"):
+        return int(text[:-1]) * 1024
+    return int(text)
+
+
 def verify_container(
     engagement: Engagement,
     runtime: ContainerRuntime,
     spec: GuiSessionSpec,
     *,
     require_running: bool = True,
+    limits: GuiLimits | None = None,
 ) -> ContainerInfo:
     """Refuse a container that is not the engagement's own isolated runner.
 
@@ -92,10 +125,12 @@ def verify_gui_preflight(
     spec: GuiSessionSpec,
     *,
     require_running: bool = True,
+    limits: GuiLimits | None = None,
 ) -> ContainerInfo:
     """Run every GUI eligibility check and return the container information."""
 
     verify_scope(engagement, paths)
+    verify_limits(engagement, limits or spec.limits)
     return verify_container(
         engagement, runtime, spec, require_running=require_running
     )

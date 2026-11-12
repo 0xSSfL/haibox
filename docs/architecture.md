@@ -257,8 +257,9 @@ These are enforced by code and covered by the unit suite:
 
 The optional Xpra GUI is documented in
 [ADR-0011](adr/0011-gui-session-in-existing-runner.md). Its runtime lives in
-`src/haibox/gui/`. It is not enabled yet: there is no `haibox gui` command and
-no `ContainerSpec` field. While the runtime exists, these invariants hold:
+`src/haibox/gui/`. It is not enabled: the `haibox gui` commands refuse to run
+while the GUI image is experimental, and there is no `ContainerSpec` field.
+While the runtime exists, these invariants hold:
 
 12. A GUI session is refused unless the engagement uses the `isolated` network
     profile with an empty target scope, the engagement metadata matches the

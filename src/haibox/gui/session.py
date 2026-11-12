@@ -29,7 +29,12 @@ from haibox.gui.credentials import (
 )
 from haibox.gui.errors import GuiError
 from haibox.gui.preflight import verify_gui_preflight
-from haibox.gui.spec import SUPPORTED_XPRA_VERSIONS, GuiLimits, GuiSessionSpec
+from haibox.gui.spec import (
+    DENIED_SERVER_FLAGS,
+    SUPPORTED_XPRA_VERSIONS,
+    GuiLimits,
+    GuiSessionSpec,
+)
 from haibox.models import Engagement
 from haibox.paths import Paths, validate_engagement_id
 from haibox.runtime.base import ContainerRuntime
@@ -78,7 +83,12 @@ for entry in os.listdir(root):
             break
         if argv[index + 1] == "stop" and argv[index + 2] == display:
             # A stop request that is still waiting for a server to appear.
-            stoppers.append(pid)
+            # It is only ours when it references this engagement's runtime
+            # directory; a stop request for another session is never touched.
+            if any(runtime_pattern.search(element) for element in argv):
+                stoppers.append(pid)
+            else:
+                foreign.append(pid)
             break
         if argv[index + 1] != "start" or argv[index + 2] != display:
             continue
@@ -298,9 +308,13 @@ class GuiSessionManager:
             if state.stoppers:
                 # Our own stop request is still waiting for a server to appear.
                 self._terminate_stoppers(spec, state.stoppers)
-                if time.monotonic() < deadline:
-                    time.sleep(0.5)
-                    continue
+                if time.monotonic() >= deadline:
+                    raise GuiError(
+                        "a stop request for this engagement is still waiting for "
+                        f"a server to appear (pids {state.stoppers})"
+                    )
+                time.sleep(0.5)
+                continue
             if not state.ours:
                 break
             if time.monotonic() >= deadline:
@@ -320,7 +334,9 @@ class GuiSessionManager:
 
         engagement = self._engagement(engagement_id)
         spec = self._spec(engagement)
-        verify_gui_preflight(engagement, self.paths, self.runtime, spec)
+        verify_gui_preflight(
+            engagement, self.paths, self.runtime, spec, limits=self.limits
+        )
         credential_path = self.credential_path(engagement_id)
         password = generate_password()
         started = False
@@ -353,7 +369,9 @@ class GuiSessionManager:
 
         engagement = self._engagement(engagement_id)
         spec = self._spec(engagement)
-        verify_gui_preflight(engagement, self.paths, self.runtime, spec)
+        verify_gui_preflight(
+            engagement, self.paths, self.runtime, spec, limits=self.limits
+        )
         state = self._server_state(spec)
         servers = state.ours
         if not servers:
@@ -363,7 +381,7 @@ class GuiSessionManager:
             if not isinstance(argv, list):
                 raise GuiError(f"cannot read the Xpra server command line for pid {pid}")
             joined = " ".join(str(part) for part in argv)
-            for flag in spec.server_flags:
+            for flag in DENIED_SERVER_FLAGS:
                 if flag not in joined:
                     raise GuiError(f"the Xpra server is missing the deny flag {flag}")
         return GuiSessionStatus(
@@ -407,10 +425,16 @@ class GuiSessionManager:
         engagement = self._engagement(engagement_id)
         spec = self._spec(engagement)
         verify_gui_preflight(
-            engagement, self.paths, self.runtime, spec, require_running=False
+            engagement,
+            self.paths,
+            self.runtime,
+            spec,
+            require_running=False,
+            limits=self.limits,
         )
         servers: tuple[int, ...] = ()
-        with contextlib.suppress(GuiError):
+        info = self.runtime.inspect_container_optional(spec.container)
+        if info is not None and info.running:
             servers = self._server_state(spec).ours
         return GuiSessionStatus(
             engagement=engagement_id,

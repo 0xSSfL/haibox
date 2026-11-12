@@ -111,7 +111,9 @@ requirements. All of it runs without Docker.
 | Container-label manipulation | `test_a_forged_engagement_label_is_refused`, `test_a_removed_managed_label_is_refused` | A forged or missing label is refused |
 | Canonical scope file | `test_a_scope_file_that_does_not_match_the_metadata_is_refused` | Drift between the metadata and the mounted scope file is refused |
 | Forwarding bypass | `test_every_forwarding_feature_is_denied_on_the_server`, `test_the_client_flags_mirror_the_server_flags`, `test_the_spec_cannot_be_widened_by_a_caller` | Clipboard, file transfer, printing, audio, webcam, notifications, DBus, and remote commands are denied on both ends, and the flag list cannot be emptied |
-| Resource exhaustion | `test_the_limits_are_bounded` | CPU, memory, process, session, connection, and timeout bounds are validated and closed |
+| Resource exhaustion | `test_the_limits_are_bounded`, `test_the_session_budget_is_enforced` | CPU, memory, process, session, connection, and timeout bounds are validated and closed, and an engagement may not ask for more than the GUI session budget |
+| Fixed deny list and paths | `test_the_deny_list_cannot_be_widened_or_narrowed`, `test_the_runtime_paths_are_fixed` | The forwarding deny list and the runtime paths cannot be widened or narrowed by a caller |
+| Container ownership in the relay | `test_the_relay_refuses_a_container_it_does_not_own` | The relay checks the managed label and the engagement label before it binds a socket |
 
 ## Desktop compatibility
 

@@ -320,6 +320,26 @@ class GuiFakeRuntime(FakeRuntime):
         return ExecResult(exit_code=0, stdout="", stderr="")
 
 
+def _relay_runtime(engagement: Engagement) -> FakeRuntime:
+    """A fake runtime with the engagement's own managed container."""
+
+    runtime = FakeRuntime()
+    runtime.containers[engagement.runtime.container_name] = ContainerInfo(
+        id="fake-0001",
+        name=engagement.runtime.container_name,
+        image=engagement.image,
+        state="running",
+        status="Up",
+        labels={
+            "haibox.managed": "true",
+            "haibox.engagement": engagement.id,
+        },
+        network_mode=engagement.runtime.network_name,
+        networks=(engagement.runtime.network_name,),
+    )
+    return runtime
+
+
 def _manager(
     paths: Paths,
     runtime: FakeRuntime,
@@ -486,7 +506,7 @@ def test_relay_refuses_a_socket_in_a_shared_directory(tmp_path: Path) -> None:
     shared.mkdir()
     shared.chmod(0o755)
     engagement = _engagement()
-    runtime = FakeRuntime()
+    runtime = _relay_runtime(engagement)
     spec = GuiSessionSpec.from_engagement(engagement)
     relay = GuiRelay(runtime, spec, shared / "gui-a.sock")
     with pytest.raises(GuiRelayError, match="0700"):
@@ -497,7 +517,7 @@ def test_relay_socket_is_private(tmp_path: Path) -> None:
     private = tmp_path / "runtime"
     private.mkdir(mode=0o700)
     engagement = _engagement()
-    runtime = FakeRuntime()
+    runtime = _relay_runtime(engagement)
     spec = GuiSessionSpec.from_engagement(engagement)
     socket_path = private / "gui-a.sock"
     relay = GuiRelay(runtime, spec, socket_path)

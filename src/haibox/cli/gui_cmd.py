@@ -111,7 +111,7 @@ def gui_start(
     manager = _manager(obj)
     try:
         status = manager.prepare(engagement)
-    except GuiError as exc:
+    except HAIBOXError as exc:
         obj.audit("gui.session_refused", engagement=engagement, data={"reason": str(exc)})
         raise
     payload = status.to_dict()
@@ -157,8 +157,20 @@ def gui_attach(
     for signum in (signal.SIGINT, signal.SIGTERM):
         signal.signal(signum, _request_stop)
     console.print(f"GUI relay listening on {target}")
-    relay.serve_forever()
-    obj.audit("gui.relay_stopped", engagement=engagement, data={"socket": str(target)})
+    client = " ".join(
+        [
+            "xpra",
+            "attach",
+            f"socket://{target}",
+            f"--password-file={status.credential_file}",
+            *spec.client_args(),
+        ]
+    )
+    console.print(f"Attach with: {client}")
+    try:
+        relay.serve_forever()
+    finally:
+        obj.audit("gui.relay_stopped", engagement=engagement, data={"socket": str(target)})
 
 
 @gui_app.command("stop")
@@ -174,7 +186,7 @@ def gui_stop(
     manager = _manager(obj)
     try:
         manager.stop(engagement)
-    except GuiError as exc:
+    except HAIBOXError as exc:
         obj.audit("gui.session_stop_failed", engagement=engagement, data={"reason": str(exc)})
         raise
     payload = {"engagement": engagement, "stopped": True}

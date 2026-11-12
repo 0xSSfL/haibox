@@ -133,10 +133,24 @@ class GuiSessionSpec:
             value = getattr(self, name)
             if not value.startswith("/") or ".." in value:
                 raise ValidationError(f"gui {name} must be an absolute path without '..'")
-        if not self.password_file.startswith(f"{self.runtime_dir}/"):
-            raise ValidationError("gui password file must live inside the runtime dir")
-        if not self.server_flags or not self.client_flags:
-            raise ValidationError("gui forwarding flags must not be empty")
+        if self.runtime_dir != DEFAULT_RUNTIME_DIR:
+            raise ValidationError(
+                f"gui runtime directory is fixed at {DEFAULT_RUNTIME_DIR!r}"
+            )
+        if self.password_file != DEFAULT_PASSWORD_FILE:
+            raise ValidationError(
+                f"gui credential file is fixed at {DEFAULT_PASSWORD_FILE!r}"
+            )
+        if self.log_file != DEFAULT_LOG_FILE:
+            raise ValidationError(f"gui log file is fixed at {DEFAULT_LOG_FILE!r}")
+        if tuple(self.server_flags) != DENIED_SERVER_FLAGS:
+            raise ValidationError(
+                "the gui server deny list is fixed and cannot be changed"
+            )
+        if tuple(self.client_flags) != DENIED_CLIENT_FLAGS:
+            raise ValidationError(
+                "the gui client deny list is fixed and cannot be changed"
+            )
 
     @classmethod
     def from_engagement(cls, engagement: Engagement) -> GuiSessionSpec:
