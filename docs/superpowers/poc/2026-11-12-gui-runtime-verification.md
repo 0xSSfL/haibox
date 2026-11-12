@@ -59,11 +59,40 @@ The runtime was exercised against a disposable engagement on the reviewed
 | Check | Observed result |
 |---|---|
 | Container shape | `haibox-gui-real` on the isolated engagement network, non-root `haibox:haibox`, read-only root filesystem, `CapDrop=["ALL"]`, no published ports, workspace read-write, `scope.json` read-only |
-| Prepare | The session started, the host credential file was created with mode 0600, and the container credential was mode 0600 |
+| Prepare | The session started (server pid 61); the host credential file was created with mode 0600 and the container credential with mode 600 |
 | Verify | The running server carried every deny-by-default flag and reported the expected display and bind address |
-| Rotation | A second prepare replaced the credential and left exactly one server process |
-| Foreign server | A second Xpra server on the same display from a different runtime directory was refused, and it was still running afterwards: it was never signalled |
-| Stop | The host credential, the container credential, the container runtime directory, and the server were all removed |
+| Rotation | A second prepare replaced the credential and left exactly one server process (pid 278) |
+| Foreign server | An Xpra server on the same display from a different runtime directory (pid 481) was refused: `another Xpra server owns display :100 (pids (481,)); refusing to stop a session that this engagement does not own`. The foreign server was still running afterwards: it was never signalled |
+| Stop | The host credential was gone, the container runtime directory was absent, and no server was left |
+
+### Two defects the real run found
+
+Neither defect was visible in the unit tests or in the image scan; both were
+found by running the code in a container.
+
+**1. The image was missing the GObject introspection bindings.** The Xpra
+server exits with `the python gobject introspection bindings are missing`
+before it binds its display, so the image now installs
+`python3-gobject-3.58.1-6.fc46` and the manifest verifies it.
+
+**2. A lingering stop request killed the next session.** `xpra stop` waits
+for a server socket to appear. When a stop request was left over from an
+earlier attempt, it stayed alive inside the container and shut down the server
+that the *next* prepare had just started — with the message `Shutting down in
+response to client request`. The runtime now:
+
+- never sends a stop request when no server is running;
+- bounds the stop request inside the container as well
+  (`timeout N xpra stop :100`), so it cannot outlive the request;
+- reports the processes that are still waiting for a server, and terminates
+  those before the runtime is reset.
+
+The third defect the run exposed was in the relay: the copy path only handled
+sockets, so bridging to the container's byte stream raised
+`'_io.BufferedWriter' object has no attribute 'send'` and the client saw
+`failed to receive anything, not an xpra server?`. The relay now copies with
+`os.read`/`os.write` on the file descriptor, so both a Unix socket and a pipe
+work, and the desktop check passes.
 
 ## Adversarial test matrix
 

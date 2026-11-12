@@ -103,17 +103,27 @@ class GuiRelay:
             raise GuiRelayError(f"cannot open the container stream: {exc}") from exc
 
     # ------------------------------------------------------------------ copies
+    @staticmethod
+    def _set_nonblocking(stream: Any) -> None:
+        """Put a socket or a pipe into non-blocking mode."""
+
+        with contextlib.suppress(OSError, AttributeError, ValueError):
+            os.set_blocking(stream.fileno(), False)
+
     def _write_chunk(self, destination: Any, chunk: bytes) -> None:
+        """Write a chunk to a socket or a pipe, bounded by the write timeout."""
+
         view = memoryview(chunk)
         deadline = time.monotonic() + self.spec.limits.stream_write_timeout
+        descriptor = destination.fileno()
         while view:
             try:
-                written = destination.send(view)
+                written = os.write(descriptor, view)
             except BlockingIOError:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise TimeoutError("relay write timed out") from None
-                with contextlib.suppress(InterruptedError):
+                with contextlib.suppress(InterruptedError, OSError, ValueError):
                     select.select([], [destination], [], min(0.5, remaining))
                 continue
             except OSError as exc:
@@ -123,10 +133,14 @@ class GuiRelay:
             view = view[written:]
 
     def _pump(self, source: Any, destination: Any, activity: list[float]) -> None:
-        """Copy bytes in one direction until the stream ends or goes idle."""
+        """Copy bytes in one direction until the stream ends or goes idle.
 
-        with contextlib.suppress(OSError):
-            source.setblocking(False)
+        Both ends may be a socket or a pipe: the client side is a Unix-domain
+        socket and the container side is a byte stream.
+        """
+
+        self._set_nonblocking(source)
+        self._set_nonblocking(destination)
         try:
             while not self.stop.is_set():
                 try:
@@ -138,7 +152,7 @@ class GuiRelay:
                         break
                     continue
                 try:
-                    chunk = source.recv(CHUNK_SIZE)
+                    chunk = os.read(source.fileno(), CHUNK_SIZE)
                 except BlockingIOError:
                     continue
                 except OSError:
