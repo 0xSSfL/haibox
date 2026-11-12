@@ -200,6 +200,36 @@ Fedora and Debian.
 A thin client over the same CLI and broker interfaces. It must not add a new
 privileged path.
 
+**Current state (2026-11-11):** design review and readiness prototype only.
+[ADR-0011](adr/0011-gui-session-in-existing-runner.md) chooses the existing
+GUI-enabled runner over a per-engagement sidecar and fixes an engagement-bound
+Unix-socket relay, independent Xpra file authentication, deny-by-default
+forwarding, and isolated-network restriction. The prototype passed Fedora 44 X11
+and headless-Wayland display/surface tests, plus authentication,
+cross-engagement, concurrency, detach, stop, and cleanup negatives. It did not
+pass the image vulnerability gate: Grype covers Fedora 44 but reports 4
+CRITICAL and 61 HIGH findings. A 2026-11-12 hardening pass added fail-closed
+isolated/empty-scope preflight, canonical scope-file comparison, exact network
+membership checks, private password and socket directories, credential rotation
+and removal, bounded relay cleanup, and a verified session replacement that
+refuses to reset the runtime, replace the credential, or start a second server
+until the previous server is confirmed gone. The hardened scripts were re-run on
+a disposable real Docker endpoint with 64 fake-runtime regressions covering the
+same paths.
+
+**Not started:**
+
+- `haibox gui start|attach|stop|status` commands, audit events, and tests;
+- `ContainerSpec` GUI fields or a supported GUI runtime seam;
+- a catalog GUI image with a clean or formally accepted scan;
+- hostile-stream testing, resource limits, and a host-client version matrix;
+- a real Fedora Workstation Wayland input test;
+- Debian packaging and host-client distribution.
+
+**Exit criteria:** the image gate is open, the relay and session lifecycle are
+product code with negative integration tests, GUI refuses non-isolated networks
+and external scopes, and the host-client matrix (X11 and Wayland) is recorded.
+
 ## Deferred indefinitely
 
 - Windows and macOS runners;

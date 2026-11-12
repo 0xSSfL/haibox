@@ -142,3 +142,51 @@ The design direction is acceptable for continued isolated prototyping. The
 production implementation is **not approved**, the disposable image is **not a
 catalog image**, and this branch makes **no claim of GUI security, scanner
 coverage, or supported cross-distro operation**.
+
+## Status update: 2026-11-11 readiness prototype
+
+The lifecycle decision is recorded in
+[ADR-0011](../../adr/0011-gui-session-in-existing-runner.md): GUI sessions stay
+inside the existing engagement runner; there is no per-engagement GUI sidecar.
+Prototype evidence is in
+[2026-11-11 Xpra GUI readiness](../poc/2026-11-11-xpra-gui-readiness.md).
+
+| Finding | Status after the prototype | Remaining work |
+|---|---|---|
+| F-01 scanner coverage | Coverage closed: the hardened adapter rejects Trivy's unsupported Fedora report and falls back to Grype. The image still has 4 CRITICAL and 61 HIGH findings. | Reduce or justify findings; the vulnerability gate is still closed. |
+| F-02 host client surface | Open. Pinned Xpra 6.5.4 client/server; no hostile-stream or fuzz tests. | Malformed/truncated stream tests, resource limits, version matrix. |
+| F-03 relay authorization/lifecycle | Prototype validates engagement ID, managed label, engagement label, running state, local UID, one-client concurrency, detach, stop, and SIGTERM cleanup. | Production audit integration, crash/reconnect tests, backpressure, restricted runtime seam. |
+| F-04 forwarding controls | 14 server flags asserted from `/proc`, matching client flags, negotiated subsystem check; no forbidden subsystem observed. | Per-feature adversarial negative tests and fail-closed production checks. |
+| F-05 scope | GUI remains on `isolated`; cross-engagement DNS/probe blocked. | Keep external targets blocked until M2 scope enforcement. |
+| F-06 credentials | Per-session random password over stdin, mode-0600 files, not in argv. | Rotation, revocation, redaction, and host-compromise analysis. |
+| F-07 packaging | Fedora 44 Xpra 6.5.4 only; 502-package inventory recorded. | Debian base/host-client packaging and version policy. |
+| F-08 Wayland | Headless Weston 15.0.1: Xpra GTK3 Wayland client created an `xdg_toplevel` for `xterm on haibox-gui-a`. Input devices were absent. | Real Fedora Workstation Wayland session and keyboard/pointer tests. |
+| F-09 residual risk | Open. | Container escape, compositor, and client vulnerability work. |
+
+No production `haibox gui` command, `ContainerSpec` GUI field, or catalog image
+is added by this update.
+
+## Status update: 2026-11-12 prototype hardening
+
+A focused prototype pass corrected the failure paths found during review. It
+does not change the production decision: the scanner gate is still closed, and
+no GUI command, runtime field, or catalog image exists.
+
+| Finding | Change in the prototype | Evidence | Status |
+|---|---|---|---|
+| F-02 host client surface | Relay copies now use non-blocking reads/writes with a 120 s idle bound and a 10 s blocked-write bound; disconnect marks the stream done instead of waiting for a stalled peer. Hostile-stream and fuzz tests are still absent. | `test_relay_pump_idle_timeout_marks_stream_done`, `test_relay_pump_eof_marks_stream_done`, `test_relay_blocked_write_times_out` | Open; bounded, not adversarially tested |
+| F-03 relay authorization/lifecycle | Preflight rejects non-`isolated` networks and non-empty `allowed`/`allowed_ports` before Docker inspect; observed `HostConfig.NetworkMode` must match and `NetworkSettings.Networks` must contain only the engagement network; inspect is limited to 10 s; child wait/terminate/kill are limited to 5/2/2 s; stream threads are joined with a 2 s bound. Real Docker refused an added internal network even when `HostConfig.NetworkMode` still matched. | `test_relay_preflight_*`, `test_resolve_engagement_*`, `test_docker_inspect_timeout_is_bounded`, `test_relay_child_cleanup_is_bounded`; evidence record "Real-Docker revalidation" | Prototype hardened; production audit/crash/backpressure remains open |
+| F-05 scope | Enforcement is now fail-closed in both relay and session preflight, not only in documentation. Engagement metadata is compared with the canonical scope file; unreadable, invalid, mismatched, or non-empty canonical scope is refused. Real Docker refused a non-empty target, metadata/file mismatch, and a mode-000 scope file. | `test_relay_preflight_rejects_*`, `test_resolve_engagement_rejects_scope_before_docker_inspect`, `test_resolve_engagement_rejects_metadata_scope_mismatch_before_inspect`, `test_resolve_engagement_rejects_non_empty_canonical_scope`, `test_resolve_engagement_rejects_unreadable_scope_file`; evidence record "Real-Docker revalidation" | Prototype enforced; external targets remain blocked until M2 |
+| F-06 credentials | Host files use `O_EXCL`/`O_NOFOLLOW`, mode 0600, and a verified 0700 parent. Container passwords live in a recreated 0700 runtime directory and are written with `noclobber`. A session is only replaced after the previous server is confirmed terminated (see the session replacement row), so a second prepare leaves one server. The host password is removed on stop, stop failure, and failed prepare; the container password and runtime are removed only when termination is confirmed. Unsafe engagement IDs are rejected before building a host path. Container-side removal requires the container to be running; the host copy is removed regardless. Real Docker verified 0600/32-byte host and container passwords, rotation, old/wrong-password refusal, stop cleanup, and failed-start cleanup. | `test_password_file_*`, `test_private_directory_rejects_symlink`, `test_prepare_creates_private_host_file_and_rotates_secrets`, `test_prepare_stops_existing_server_before_resetting_runtime`, `test_prepare_failure_removes_stale_host_and_container_password`, `test_stop_removes_both_password_files_when_the_stop_command_fails`, `test_stop_keeps_the_container_runtime_when_the_server_survives`; evidence record "Real-Docker revalidation" | Prototype hardened; audited production revocation and log redaction remain open |
+| F-03/F-06 session replacement | The `xpra stop` exit code is advisory only. An ownership check runs first, so an Xpra server on the display that does not belong to the engagement is reported and never signalled. Prepare then confirms that the previous server is gone by scanning the container for a live Xpra server process on the display and by probing the container loopback port, under a bounded deadline; an unreadable or ambiguous state is a refusal. The credential is not replaced, the runtime is not reset, no second server is started, and nothing inside the container is deleted until the previous server is confirmed gone. The scan pattern is rendered from the same constants that start the server and is exercised against a fixture `/proc` tree. | `test_stop_server_*`, `test_server_scan_script_*`, `test_prepare_refuses_to_reset_or_rotate_when_the_old_server_survives`, `test_second_prepare_rotates_credentials_and_keeps_one_server` | Prototype hardened; production audit/crash/backpressure remains open |
+| Shared trust boundary | ADR-0011 and the evidence record now state that Xpra and its applications share the runner's user, workspace, network, capabilities, and resource budget. The password protects transport, not intra-container isolation. | ADR-0011 section 4; evidence record "Shared trust boundary" | Documented |
+
+The unit regressions use fake runtimes. The hardened scripts were then re-run on
+a disposable real Docker endpoint; the observed network-membership, scope-file,
+rotation, authentication, socket, detach/reconnect, stop, failure-cleanup, and
+network-isolation results are recorded in the evidence record. A second
+disposable engagement confirmed the session replacement lifecycle: a server that
+survived a timed-out stop was refused without touching the credential, runtime,
+or server, and a foreign Xpra server on the same display was refused and never
+signalled. These results validate the prototype behaviour only and do not close
+any production gate.

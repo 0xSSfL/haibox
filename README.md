@@ -197,7 +197,7 @@ escape or a substitute for authorization**. The Docker host remains trusted.
 | External targets | The default runner has no internet or external DNS access. Scoped external connectivity is planned. |
 | VPN | Profile storage and gateway lifecycle code exist, but the gateway image has not been built. Runner routing and the kill switch are not implemented. |
 | AI | The restricted Docker broker and AI adapter are not implemented. Manual use does not require AI. |
-| GUI / desktop | No `haibox gui` commands or supported native-window feature. A Fedora X11 Xpra proof of concept is documented in [verification status](docs/verification-status.md); its disposable image is unscanned, and other Linux distributions and Wayland remain unverified. |
+| GUI / desktop | No `haibox gui` commands or supported native-window feature. A Fedora 44 X11 and headless-Wayland Xpra readiness prototype is documented in [verification status](docs/verification-status.md); its disposable image is covered by the Grype fallback but still has unresolved HIGH/CRITICAL findings, Wayland input is unverified, and no other Linux distribution is supported. The prototype was re-run against real Docker on 2026-11-12: fail-closed scope and network preflight, exact network-membership checks, credential rotation and removal, and a verified session replacement that refuses to touch the runtime, the credential, or the server until the previous Xpra server is confirmed terminated. |
 | Image security | Unresolved dependency vulnerabilities keep the scan gate open. |
 | Secrets and records | Secrets are plaintext at rest with file permissions. Hashes and audit chains are not tamper-proof against a trusted host user or administrator. |
 

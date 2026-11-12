@@ -12,6 +12,7 @@
 | [0008](0008-engagement-network-isolation-profile.md) | Isolated gateway mode for engagement networks | Accepted; decision 3 superseded by 0009 |
 | [0009](0009-remove-legacy-internal-profile.md) | Remove the legacy internal network profile | Accepted |
 | [0010](0010-scoped-connectivity-profile.md) | Scoped connectivity profile for authorized external targets | Proposed; not implemented |
+| [0011](0011-gui-session-in-existing-runner.md) | Optional GUI sessions in the existing engagement runner | Proposed; prototype only |
 
 An ADR is required for any change that weakens a security invariant listed in
 `SECURITY.md`. Supersede an ADR with a new record; do not edit history.

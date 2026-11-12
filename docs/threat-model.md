@@ -365,6 +365,14 @@ must have a recorded result before the platform is used on a real engagement.
 - [ ] `trivy image` (or grype) reports no unaccepted HIGH/CRITICAL findings.
       Web Security is still open at 165 findings; the other images have not
       been scanned yet.
+- [ ] Prototype-only GUI session (ADR-0011): the relay refuses an engagement
+      that is not `isolated`, has a non-empty scope, has scope metadata that
+      differs from the canonical scope file, or is attached to a network other
+      than the engagement network; a session is never replaced before the
+      previous server is confirmed terminated; a foreign Xpra server on the
+      same display is never signalled; the socket is mode 0600 inside a
+      mode-0700 directory. (Prototype evidence only; the GUI is not a
+      product feature.)
 
 ## 8. Incident response
 
