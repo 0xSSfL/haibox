@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from collections.abc import Callable
 from typing import Any
 
@@ -18,6 +19,7 @@ from haibox.policy.nftables import NftablesPolicy
 from haibox.runtime.base import (
     ContainerInfo,
     ExecResult,
+    ExecStream,
     ImageInfo,
     NetworkInfo,
     parse_labels,
@@ -469,6 +471,16 @@ class DockerCli:
         state: dict[str, Any] = state_raw if isinstance(state_raw, dict) else {}
         config_raw = raw.get("Config")
         config: dict[str, Any] = config_raw if isinstance(config_raw, dict) else {}
+        host_raw = raw.get("HostConfig")
+        host: dict[str, Any] = host_raw if isinstance(host_raw, dict) else {}
+        network_raw = raw.get("NetworkSettings")
+        network: dict[str, Any] = network_raw if isinstance(network_raw, dict) else {}
+        networks_raw = network.get("Networks")
+        networks = (
+            tuple(sorted(str(name) for name in networks_raw))
+            if isinstance(networks_raw, dict)
+            else ()
+        )
         return ContainerInfo(
             id=str(raw.get("Id", "")),
             name=str(raw.get("Name", "")).lstrip("/"),
@@ -477,6 +489,8 @@ class DockerCli:
             status=str(state.get("Status", "")),
             labels=parse_labels(config.get("Labels")),
             created=str(raw.get("Created", "")),
+            network_mode=str(host.get("NetworkMode", "")),
+            networks=networks,
         )
 
     def _verify_created_container(self, spec: ContainerSpec) -> None:
@@ -760,6 +774,73 @@ class DockerCli:
             stdout=result.stdout,
             stderr=result.stderr,
         )
+
+    def exec_detached(
+        self, name: str, command: list[str], timeout: int | None = None
+    ) -> None:
+        """Start a command in the background inside the container."""
+
+        info = self._require_managed_container(name)
+        if not info.running:
+            raise ContainerError(f"container is not running: {name}")
+        if not command:
+            raise ContainerError("exec command must not be empty")
+        result = self._run(["exec", "--detach", name, *command], timeout=timeout)
+        if not result.ok:
+            detail = (result.stderr or result.stdout).strip()[:400]
+            raise ContainerError(f"cannot start a detached command in {name}: {detail}")
+
+    def exec_with_input(
+        self,
+        name: str,
+        command: list[str],
+        input_bytes: bytes,
+        timeout: int | None = None,
+    ) -> ExecResult:
+        """Run a command in the container and write bytes to its standard input."""
+
+        info = self._require_managed_container(name)
+        if not info.running:
+            raise ContainerError(f"container is not running: {name}")
+        if not command:
+            raise ContainerError("exec command must not be empty")
+        full = [*self.base_args, "exec", "--interactive", name, *command]
+        if self.on_command is not None:
+            self.on_command(redact_args(full))
+        limit = self.settings.timeout_seconds if timeout is None else timeout
+        try:
+            completed = subprocess.run(  # noqa: S603 - explicit argv, no shell
+                full,
+                input=input_bytes,
+                capture_output=True,
+                timeout=limit,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise ContainerError(
+                f"docker exec in {name} timed out after {limit}s"
+            ) from exc
+        except OSError as exc:
+            raise ContainerError(f"cannot run docker: {exc}") from exc
+        return ExecResult(
+            exit_code=completed.returncode,
+            stdout=(completed.stdout or b"").decode("utf-8", "replace"),
+            stderr=(completed.stderr or b"").decode("utf-8", "replace"),
+        )
+
+    def exec_stream(self, name: str, command: list[str]) -> ExecStream:
+        """Open a bidirectional byte stream to a command in the container."""
+
+        info = self._require_managed_container(name)
+        if not info.running:
+            raise ContainerError(f"container is not running: {name}")
+        if not command:
+            raise ContainerError("exec command must not be empty")
+        full = [*self.base_args, "exec", "--interactive", name, *command]
+        if self.on_command is not None:
+            self.on_command(redact_args(full))
+        stream = self.runner.stream(full)
+        return ExecStream(stdin=stream.stdin, stdout=stream.stdout, close=stream.close)
 
     # ----------------------------------------------------------------- images
     def image_exists(self, ref: str) -> bool:

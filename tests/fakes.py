@@ -8,14 +8,15 @@ runner does the same for the Docker CLI adapter itself.
 from __future__ import annotations
 
 import dataclasses
+import io
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
 from haibox.errors import ContainerError, RuntimeFailure
 from haibox.models import NetworkProfile, Scope
-from haibox.runtime.base import ContainerInfo, ExecResult, ImageInfo
-from haibox.runtime.process import ProcessResult
+from haibox.runtime.base import ContainerInfo, ExecResult, ExecStream, ImageInfo
+from haibox.runtime.process import ProcessResult, ProcessStream
 from haibox.runtime.spec import ContainerSpec
 from haibox.runtime.vpn_spec import VpnGatewaySpec
 
@@ -37,6 +38,8 @@ class FakeRuntime:
     missing_images: set[str] = field(default_factory=set)
     calls: list[tuple[str, tuple[Any, ...]]] = field(default_factory=list)
     exec_results: list[ExecResult] = field(default_factory=list)
+    detached_commands: list[tuple[str, ...]] = field(default_factory=list)
+    written_inputs: list[bytes] = field(default_factory=list)
 
     def _record(self, name: str, *args: Any) -> None:
         self.calls.append((name, args))
@@ -105,6 +108,8 @@ class FakeRuntime:
             state="created",
             status="Created",
             labels=dict(spec.labels),
+            network_mode=spec.network,
+            networks=(spec.network,),
         )
         return container_id
 
@@ -190,6 +195,36 @@ class FakeRuntime:
             return self.exec_results.pop(0)
         return ExecResult(exit_code=0, stdout="", stderr="")
 
+    def exec_detached(
+        self, name: str, command: list[str], timeout: int | None = None
+    ) -> None:
+        self._record("exec_detached", name, tuple(command), timeout)
+        self._container(name)
+        self.detached_commands.append(tuple(command))
+
+    def exec_with_input(
+        self,
+        name: str,
+        command: list[str],
+        input_bytes: bytes,
+        timeout: int | None = None,
+    ) -> ExecResult:
+        self._record("exec_with_input", name, tuple(command), timeout)
+        self._container(name)
+        self.written_inputs.append(input_bytes)
+        if self.exec_results:
+            return self.exec_results.pop(0)
+        return ExecResult(exit_code=0, stdout="", stderr="")
+
+    def exec_stream(self, name: str, command: list[str]) -> ExecStream:
+        self._record("exec_stream", name, tuple(command))
+        self._container(name)
+        return ExecStream(
+            stdin=io.BytesIO(),
+            stdout=io.BytesIO(),
+            close=lambda: None,
+        )
+
     # ----------------------------------------------------------------- images
     def image_exists(self, ref: str) -> bool:
         self._record("image_exists", ref)
@@ -251,6 +286,24 @@ class FakeRuntime:
 Handler = Callable[[list[str], dict[str, Any]], ProcessResult]
 
 
+class _FakeProcess:
+    """A process-like object with byte pipes for relay tests."""
+
+    def __init__(self) -> None:
+        self.stdin = io.BytesIO()
+        self.stdout = io.BytesIO()
+
+    def wait(self, timeout: float | None = None) -> int:
+        del timeout
+        return 0
+
+    def terminate(self) -> None:
+        return None
+
+    def kill(self) -> None:
+        return None
+
+
 class ScriptedRunner:
     """CommandRunner with a caller-supplied response function."""
 
@@ -283,6 +336,11 @@ class ScriptedRunner:
         del env
         self.calls.append([str(arg) for arg in args])
         return self.interactive_code
+
+    def stream(self, args: list[str], *, env: dict[str, str] | None = None) -> ProcessStream:
+        del env
+        self.calls.append([str(arg) for arg in args])
+        return ProcessStream(_FakeProcess())
 
     def which(self, program: str) -> str | None:
         del program

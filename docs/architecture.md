@@ -253,12 +253,12 @@ These are enforced by code and covered by the unit suite:
 11. The default network profile is `isolated`; a reused network without both
     gateway modes set to `isolated`, or with a host gateway, is refused.
 
-### 6.1 Prototype-only GUI session invariants
+### 6.1 GUI session invariants
 
-The optional Xpra GUI is a disposable prototype documented in
-[ADR-0011](adr/0011-gui-session-in-existing-runner.md). It is not part of the
-product: there is no `haibox gui` command, no `ContainerSpec` field, and no
-catalog image. While the prototype exists, these invariants hold:
+The optional Xpra GUI is documented in
+[ADR-0011](adr/0011-gui-session-in-existing-runner.md). Its runtime lives in
+`src/haibox/gui/`. It is not enabled yet: there is no `haibox gui` command and
+no `ContainerSpec` field. While the runtime exists, these invariants hold:
 
 12. A GUI session is refused unless the engagement uses the `isolated` network
     profile with an empty target scope, the engagement metadata matches the
@@ -276,6 +276,11 @@ catalog image. While the prototype exists, these invariants hold:
     on every prepare. The host copy is removed on stop; the container copy and
     the container runtime are removed only once the previous server's
     termination is confirmed.
+16. The GUI runtime reaches the container only through the runtime seam. It
+    builds every container command from the fixed session specification, so no
+    caller can pass a container command or a runtime argument.
+17. The GUI session has explicit CPU, memory, process, connection, and timeout
+    limits, and every copy in the relay is bounded.
 
 ## 7. Known gaps
 

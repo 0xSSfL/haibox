@@ -25,6 +25,8 @@ class ContainerInfo:
     status: str
     labels: dict[str, str] = field(default_factory=dict)
     created: str = ""
+    network_mode: str = ""
+    networks: tuple[str, ...] = ()
 
     @property
     def running(self) -> bool:
@@ -81,6 +83,25 @@ class ExecResult:
         return self.exit_code == 0
 
 
+@dataclass
+class ExecStream:
+    """A live byte stream to a running container.
+
+    The GUI relay uses this to bridge a local Unix socket to the container's
+    Xpra listener without exposing the container command line to a caller.
+    """
+
+    stdin: Any
+    stdout: Any
+    close: Any = None
+
+    def shutdown(self) -> None:
+        """Close the stream and stop the child process."""
+
+        if callable(self.close):
+            self.close()
+
+
 class ContainerRuntime(Protocol):
     def ensure_available(self) -> str:
         """Return the server version or raise RuntimeFailure."""
@@ -131,6 +152,23 @@ class ContainerRuntime(Protocol):
     def exec_capture(
         self, name: str, command: list[str], timeout: int | None = None
     ) -> ExecResult: ...
+
+    def exec_detached(
+        self, name: str, command: list[str], timeout: int | None = None
+    ) -> None:
+        """Start a command in the background inside the container."""
+
+    def exec_with_input(
+        self,
+        name: str,
+        command: list[str],
+        input_bytes: bytes,
+        timeout: int | None = None,
+    ) -> ExecResult:
+        """Run a command in the container and write bytes to its standard input."""
+
+    def exec_stream(self, name: str, command: list[str]) -> ExecStream:
+        """Open a bidirectional byte stream to a command in the container."""
 
     def image_exists(self, ref: str) -> bool: ...
 
