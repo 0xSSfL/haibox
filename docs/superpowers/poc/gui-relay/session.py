@@ -137,7 +137,28 @@ def _password_path(state_dir: Path, engagement: str) -> Path:
     return Path(state_dir).expanduser().absolute() / f"{valid}.password"
 
 
+def _stop_server(context: str, container: str) -> None:
+    """Best-effort stop so prepare can rotate without spawning a second server."""
+
+    with contextlib.suppress(SecurityError):
+        _docker(
+            context,
+            [
+                "exec",
+                container,
+                "env",
+                f"XDG_RUNTIME_DIR={RUNTIME_DIR}",
+                "HOME=/tmp",
+                "xpra",
+                "stop",
+                DISPLAY,
+            ],
+            timeout=STOP_TIMEOUT,
+        )
+
+
 def _reset_container_runtime(context: str, container: str) -> None:
+    _stop_server(context, container)
     _must(
         context,
         [
@@ -187,21 +208,7 @@ def _cleanup_container(
     """Best-effort removal of the server, runtime directory, and password."""
 
     if stop_server:
-        with contextlib.suppress(SecurityError):
-            _docker(
-                context,
-                [
-                    "exec",
-                    container,
-                    "env",
-                    f"XDG_RUNTIME_DIR={RUNTIME_DIR}",
-                    "HOME=/tmp",
-                    "xpra",
-                    "stop",
-                    DISPLAY,
-                ],
-                timeout=STOP_TIMEOUT,
-            )
+        _stop_server(context, container)
     with contextlib.suppress(SecurityError):
         _docker(
             context,

@@ -158,9 +158,19 @@ must be covered by a test; documentation alone is not enforcement.
 
 The prototype enforces this in both `relay.py` and `session.py` before any
 Docker inspection or password write. It also checks the observed container
-`NetworkMode` against the engagement network. Unit regression tests cover the
-`isolated` requirement, non-empty `allowed` and `allowed_ports`, preflight
-ordering, and a network-mode mismatch.
+`HostConfig.NetworkMode` and requires `NetworkSettings.Networks` to contain
+exactly one membership: the engagement network. An additional network is a
+refusal even when `HostConfig.NetworkMode` still names the expected network.
+
+The engagement metadata scope is compared with the canonical scope file that
+the runtime bind-mounts at `/etc/haibox/scope.json`. Both sides must match
+exactly; an unreadable or invalid canonical file, or any non-empty `allowed` or
+`allowed_ports`, is a refusal. This catches metadata/file drift instead of
+trusting either copy alone.
+
+Unit regression tests cover the `isolated` requirement, non-empty `allowed` and
+`allowed_ports`, preflight ordering, canonical-file mismatch/unreadability, a
+network-mode mismatch, and additional or missing network membership.
 
 ### 7. Lifecycle is engagement-scoped
 
@@ -269,8 +279,10 @@ Prototype evidence is recorded in
 [`docs/superpowers/poc/2026-11-11-xpra-gui-readiness.md`](../superpowers/poc/2026-11-11-xpra-gui-readiness.md).
 
 The 2026-11-12 hardening pass adds unit regressions for the fail-closed network
-and scope preflight, observed `NetworkMode` mismatch, private socket/host-file
+and scope preflight, canonical scope-file comparison, additional/missing network
+membership, observed `NetworkMode` mismatch, private socket/host-file
 directories, symlink refusal, password rotation and stale-file removal, stop
 and failed-prepare cleanup, unsafe engagement IDs, Docker inspect timeout,
-stream idle/write bounds, and bounded child termination. These tests use fakes
-and do not replace real-Docker revalidation of the hardened scripts.
+stream idle/write bounds, and bounded child termination. The hardened scripts
+were then re-run on disposable real Docker engagements; those observations are
+recorded in the evidence record and validate the prototype only.

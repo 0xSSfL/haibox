@@ -214,18 +214,53 @@ remain untouched.
 
 | Control | Implementation | Regression evidence |
 |---|---|---|
-| Fail-closed target preflight | `isolated` network and empty `allowed`/`allowed_ports` are required before Docker inspection; observed `HostConfig.NetworkMode` must match the engagement network | `test_relay_preflight_*`, `test_resolve_engagement_rejects_scope_before_docker_inspect`, `test_resolve_engagement_rejects_observed_network_mismatch` |
+| Fail-closed target preflight | `isolated` network and empty `allowed`/`allowed_ports` are required before Docker inspection; canonical scope metadata must equal the mount source; observed `HostConfig.NetworkMode` must match and `NetworkSettings.Networks` must contain only the engagement network | `test_relay_preflight_*`, `test_resolve_engagement_rejects_scope_before_docker_inspect`, `test_resolve_engagement_rejects_metadata_scope_mismatch_before_inspect`, `test_resolve_engagement_rejects_non_empty_canonical_scope`, `test_resolve_engagement_rejects_unreadable_scope_file`, `test_resolve_engagement_rejects_observed_network_mismatch`, `test_resolve_engagement_rejects_additional_network_membership`, `test_resolve_engagement_rejects_missing_network_membership` |
 | Host password creation | `O_EXCL`/`O_NOFOLLOW`, mode 0600 from creation, verified owner-owned 0700 parent, symlink/non-regular replacement refused | `test_password_file_is_private_and_rotation_replaces_content`, `test_password_file_refuses_symlink_without_touching_target`, `test_password_file_requires_private_parent`, `test_private_directory_rejects_symlink` |
 | Container password | Private `/tmp/xpra-runtime` recreated at 0700, `noclobber` write over stdin, mode checked after creation | `test_prepare_writes_container_password_in_private_runtime` |
-| Rotation and stale credentials | Every prepare rotates the password and replaces only a regular host file; stale container state is removed before writing | `test_prepare_creates_private_host_file_and_rotates_secrets`, `test_prepare_failure_removes_stale_host_and_container_password` |
+| Rotation and stale credentials | Every prepare stops any existing server on the display before resetting the container runtime, so a second prepare does not spawn a second server; the password rotates and only a regular host file is replaced | `test_prepare_creates_private_host_file_and_rotates_secrets`, `test_prepare_stops_existing_server_before_resetting_runtime`, `test_prepare_failure_removes_stale_host_and_container_password` |
 | Stop and failure cleanup | Host and container password files removed on stop, even when `xpra stop` fails; failed prepare removes both; unsafe engagement IDs are rejected before any path is built | `test_stop_removes_host_and_container_password_even_if_xpra_stop_fails`, `test_stop_rejects_unsafe_engagement_id_before_removing_anything`, `test_prepare_refuses_non_private_state_directory` |
 | Socket path | No `/tmp` fallback; `XDG_RUNTIME_DIR` or an explicit socket path must be inside an owner-controlled 0700 directory; existing paths are refused | `test_socket_path_requires_xdg_runtime_dir`, `test_socket_path_rejects_shared_parent`, `test_socket_path_accepts_private_parent`, `test_relay_refuses_existing_socket_path` |
 | Bounded relay I/O | Docker inspect 10 s, stream idle 120 s, blocked write 10 s, child wait/terminate/kill 5/2/2 s, non-blocking stream copies, disconnect marks the stream done | `test_docker_inspect_timeout_is_bounded`, `test_relay_pump_idle_timeout_marks_stream_done`, `test_relay_pump_eof_marks_stream_done`, `test_relay_blocked_write_times_out`, `test_relay_child_cleanup_is_bounded` |
 | Bounded session Docker calls | Every helper call carries a timeout and converts `TimeoutExpired` into a clean `SessionError` | `test_session_docker_timeout_is_reported` |
 
-The new tests are in `tests/unit/test_gui_prototype.py` and use fakes only. They
-do not re-run the hardened scripts against a real Docker endpoint; that
-revalidation remains required before any production claim.
+The new tests are in `tests/unit/test_gui_prototype.py` and use fakes only.
+The hardened scripts were then re-run against a real Docker endpoint; the
+observed results are recorded below.
+
+### Real-Docker revalidation (2026-11-12)
+
+The hardened relay and session scripts were run against Docker 29.9.2 through
+the dedicated `haibox` context. The disposable engagements were `gui-hc-1` and
+`gui-hc-2` (empty scope) and `gui-hc-scope` (target `10.10.20.5`, port 443),
+all with the `core` profile and the disposable
+`haibox/gui-poc-validation:0.1.0` image. Data, config, state, and runtime lived
+under `/tmp/opencode/gui-hardening-2026-11-12`; the state and runtime
+directories were mode 0700. No production CLI, runtime, catalog image, or
+external network path was used.
+
+| Check | Observed result |
+|---|---|
+| Additional network membership | Attached the running `gui-hc-1` container to a second `--internal` network while `HostConfig.NetworkMode` still named `haibox-gui-hc-1-net`. `NetworkSettings.Networks` listed both names. Relay exited 2 with `is attached to networks [...]; expected only 'haibox-gui-hc-1-net'` and created no socket. The extra network was disconnected and removed. |
+| Non-empty target scope | `gui-hc-scope` relay exited 2: `has external targets; the GUI requires an empty target scope`. |
+| Metadata/file mismatch | Changed the canonical `scope.json` notes while leaving engagement metadata unchanged. Relay exited 2: `scope metadata does not match the canonical scope file`. |
+| Unreadable canonical scope | `chmod 000` on the canonical file made relay exit 2 with `cannot read canonical scope file ... Permission denied`. The file was restored with SHA-256 `98335f748819decd7979a3e7edee15ba79ea055799216ab3d959786d4939bc1f` and mode 600; the restored hash matched the pre-test hash. |
+| Prepare and verify | Host password mode 0600, 32 bytes; container password mode 0600, `haibox:haibox`, 32 bytes, and byte-identical to the host copy. Xpra `v6.5.4` listened only on `127.0.0.1:14500`; `verify` reported `sharing=False`, 14 deny-by-default flags, and no negotiated client subsystems. |
+| Password rotation | A second prepare stopped the existing server first, rotated the host and container password, and left exactly one Xpra server process. The old password and a wrong password both failed with exit 28 and repeated `Authentication failed`; the new password attached and opened `xterm on haibox-gui-hc-1`. |
+| Socket permissions | Relay runtime directory mode 0700, owner `souaib:souaib`; socket mode 0600. |
+| Detach and reconnect | Interrupting the host client removed the window while the relay stayed alive; a second attach with the current password reopened the window. |
+| Cross-engagement refusal | The correct password for `gui-hc-2` opened `xterm on haibox-gui-hc-2`. Using the `gui-hc-1` password against the `gui-hc-2` relay and vice versa both exited 28 with `Authentication failed`. |
+| Stop cleanup | `session stop` removed the host password, container password, container runtime directory, and Xpra server. Separate SIGTERM of a relay removed its socket. |
+| Failure cleanup | Made `/tmp/xpra.log` a directory inside `gui-hc-1` to force server start failure. Prepare exited 2 (`Xpra did not listen on container loopback`), removed the host password, left no container runtime directory, and left no Xpra server process. The directory was then removed. |
+| Network isolation | `gui-hc-1` and `gui-hc-2` were on different isolated networks (`172.19.0.1` and `172.20.0.1`). A listener on `gui-hc-2:9999` was reachable from its own loopback (exit 0), but a TCP probe from `gui-hc-1` failed with `Network is unreachable` (exit 1), and name resolution of `haibox-gui-hc-2` from `gui-hc-1` failed (exit 2). |
+| Container invariants | `Privileged=false`, `ReadonlyRootfs=true`, empty `PortBindings`, `PublishAllPorts=false`, `PidMode=""`, `IpcMode=private`, `CapDrop=["ALL"]`, no `CapAdd`, `no-new-privileges:true`, user `1000:1000`. `/var/run/docker.sock`, `/run/user/1000`, and the host display socket were absent; the workspace mount was read-write and `scope.json` read-only. |
+
+`make check` on 2026-11-12: **367 passed, 2 skipped**; `ruff check .` and
+`mypy src` passed. The 39 GUI prototype regressions are included in that count.
+
+These observations validate the disposable prototype paths only. They do not
+close the production blockers: hostile-stream testing, audited lifecycle
+integration, resource limits, the image vulnerability gate, real Wayland input,
+and productionized crash/reconnect behavior remain open.
 
 ### Shared trust boundary
 
@@ -260,8 +295,6 @@ The prototype does not close F-02 through F-09:
   the next prepare resets it;
 - audited revocation and log-redaction are not implemented in a product
   lifecycle;
-- the hardened relay/session scripts have unit regressions but have not been
-  re-run against a real Docker endpoint;
 - server packaging for the Debian-based catalog and host-client distribution
   remain undecided;
 - container escape, compositor, and host-client vulnerabilities remain residual

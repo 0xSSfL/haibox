@@ -46,6 +46,7 @@ from security import SecurityError, ensure_private_directory  # noqa: E402
 
 from haibox.engagement import EngagementManager  # noqa: E402
 from haibox.paths import Paths  # noqa: E402
+from haibox.scope import load_scope  # noqa: E402
 
 DEFAULT_CONTEXT = os.environ.get("HAIBOX_DOCKER_CONTEXT", "haibox")
 XRPA_PORT = 14500
@@ -101,6 +102,23 @@ def _preflight_engagement(engagement: Any, engagement_id: str) -> None:
         )
 
 
+def _preflight_scope_file(engagement: Any, engagement_id: str, paths: Any) -> None:
+    """Compare metadata with the scope file bind-mounted into the runner."""
+
+    scope_path = paths.scope_file(engagement_id)
+    try:
+        canonical = load_scope(scope_path)
+    except Exception as exc:  # noqa: BLE001 - any unreadable scope is a refusal
+        raise RelayError(
+            f"cannot read canonical scope file for {engagement_id!r}: {exc}"
+        ) from exc
+    if engagement.scope != canonical:
+        raise RelayError(
+            f"engagement {engagement_id!r} scope metadata does not match "
+            f"the canonical scope file {scope_path}"
+        )
+
+
 def resolve_engagement(
     engagement_id: str,
     *,
@@ -129,6 +147,7 @@ def resolve_engagement(
         )
 
     if require_gui_preflight:
+        _preflight_scope_file(engagement, engagement_id, paths)
         _preflight_engagement(engagement, engagement_id)
     raw = _docker_inspect(context, expected)
 
@@ -140,6 +159,8 @@ def resolve_engagement(
     state = state if isinstance(state, dict) else {}
     host_config = raw.get("HostConfig")
     host_config = host_config if isinstance(host_config, dict) else {}
+    network_settings = raw.get("NetworkSettings")
+    network_settings = network_settings if isinstance(network_settings, dict) else {}
 
     if labels.get("haibox.managed") != "true":
         raise RelayError(f"container {expected} is not HAIBOX-managed")
@@ -157,6 +178,19 @@ def resolve_engagement(
             f"container {expected} uses network {observed_network!r}; "
             f"expected {expected_network!r}"
         )
+
+    if require_gui_preflight:
+        networks = network_settings.get("Networks")
+        if not isinstance(networks, dict):
+            raise RelayError(
+                f"container {expected} does not report network membership"
+            )
+        memberships = sorted(str(name) for name in networks)
+        if memberships != [expected_network]:
+            raise RelayError(
+                f"container {expected} is attached to networks {memberships!r}; "
+                f"expected only {expected_network!r}"
+            )
 
     workspace = paths.workspace_dir(engagement_id).resolve()
     return expected, workspace

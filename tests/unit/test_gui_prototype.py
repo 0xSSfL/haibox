@@ -17,6 +17,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from haibox.models import Scope
+from haibox.scope import scope_to_json
+
 GUI_RELAY_DIR = Path(__file__).resolve().parents[2] / "docs/superpowers/poc/gui-relay"
 sys.path.insert(0, str(GUI_RELAY_DIR))
 
@@ -215,6 +218,24 @@ def test_prepare_writes_container_password_in_private_runtime(
     )
 
 
+def test_prepare_stops_existing_server_before_resetting_runtime(
+    session_state: Path, fake_session: FakeDocker
+) -> None:
+    session.prepare(
+        "gui-a",
+        state_dir=session_state,
+        data_dir=None,
+        config_dir=None,
+        context="haibox",
+    )
+
+    commands = [" ".join(call["args"]) for call in fake_session.calls]
+    stop_index = next(index for index, command in enumerate(commands) if "xpra stop" in command)
+    reset_index = next(index for index, command in enumerate(commands) if "rm -rf" in command)
+    assert stop_index < reset_index
+    assert sum("xpra start" in command for command in commands) == 1
+
+
 def test_prepare_failure_removes_stale_host_and_container_password(
     session_state: Path, fake_session: FakeDocker
 ) -> None:
@@ -319,6 +340,7 @@ def _engagement(
     network_mode: str = "isolated",
     allowed: list[str] | None = None,
     allowed_ports: list[int] | None = None,
+    notes: str = "",
 ) -> SimpleNamespace:
     return SimpleNamespace(
         runtime=SimpleNamespace(
@@ -326,10 +348,37 @@ def _engagement(
             network_name="haibox-gui-a-net",
             container_name="haibox-gui-a",
         ),
-        scope=SimpleNamespace(
+        scope=Scope(
             allowed=allowed or [],
             allowed_ports=allowed_ports or [],
+            notes=notes,
         ),
+    )
+
+
+def _paths(tmp_path: Path, scope: Scope) -> SimpleNamespace:
+    scope_file = tmp_path / "scope.json"
+    scope_file.write_text(scope_to_json(scope), encoding="utf-8")
+    return SimpleNamespace(
+        workspace_dir=lambda _engagement_id: tmp_path / "workspace",
+        scope_file=lambda _engagement_id: scope_file,
+    )
+
+
+def _install_loaded_engagement(
+    monkeypatch: pytest.MonkeyPatch,
+    engagement: SimpleNamespace,
+    paths: SimpleNamespace,
+) -> None:
+    monkeypatch.setattr(
+        relay,
+        "Paths",
+        SimpleNamespace(resolve=lambda *_args, **_kwargs: paths),
+    )
+    monkeypatch.setattr(
+        relay,
+        "EngagementManager",
+        lambda _paths: SimpleNamespace(load=lambda _engagement_id: engagement),
     )
 
 
@@ -355,97 +404,170 @@ def test_relay_preflight_rejects_external_scope(kwargs: dict[str, object]) -> No
         relay._preflight_engagement(_engagement(**kwargs), "gui-a")
 
 
+def _inspect_raw(
+    engagement: SimpleNamespace,
+    *,
+    host_network: str | None = None,
+    networks: list[str] | None = None,
+) -> dict[str, object]:
+    expected = engagement.runtime.network_name
+    memberships = [expected] if networks is None else networks
+    return {
+        "Config": {
+            "Labels": {
+                "haibox.managed": "true",
+                "haibox.engagement": "gui-a",
+            }
+        },
+        "State": {"Status": "running"},
+        "HostConfig": {"NetworkMode": host_network or expected},
+        "NetworkSettings": {"Networks": {name: {} for name in memberships}},
+    }
+
+
+def _assert_inspect_not_called(monkeypatch: pytest.MonkeyPatch) -> list[bool]:
+    inspected: list[bool] = []
+    monkeypatch.setattr(
+        relay,
+        "_docker_inspect",
+        lambda *_args, **_kwargs: inspected.append(True) or {},
+    )
+    return inspected
+
+
 def test_resolve_engagement_rejects_scope_before_docker_inspect(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     engagement = _engagement(allowed=["10.10.20.5"])
-    paths = SimpleNamespace(workspace_dir=lambda _engagement_id: tmp_path / "workspace")
-    monkeypatch.setattr(
-        relay,
-        "Paths",
-        SimpleNamespace(resolve=lambda *_args, **_kwargs: paths),
-    )
-    monkeypatch.setattr(
-        relay,
-        "EngagementManager",
-        lambda _paths: SimpleNamespace(load=lambda _engagement_id: engagement),
-    )
-    inspected = False
-
-    def inspect(*_args: object, **_kwargs: object) -> dict[str, object]:
-        nonlocal inspected
-        inspected = True
-        return {}
-
-    monkeypatch.setattr(relay, "_docker_inspect", inspect)
+    _install_loaded_engagement(monkeypatch, engagement, _paths(tmp_path, engagement.scope))
+    inspected = _assert_inspect_not_called(monkeypatch)
 
     with pytest.raises(relay.RelayError, match="external targets"):
         relay.resolve_engagement("gui-a")
-    assert inspected is False
+    assert inspected == []
+
+
+def test_resolve_engagement_rejects_metadata_scope_mismatch_before_inspect(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    engagement = _engagement(notes="metadata copy")
+    canonical = Scope(notes="mounted file copy")
+    _install_loaded_engagement(monkeypatch, engagement, _paths(tmp_path, canonical))
+    inspected = _assert_inspect_not_called(monkeypatch)
+
+    with pytest.raises(relay.RelayError, match="scope metadata does not match"):
+        relay.resolve_engagement("gui-a")
+    assert inspected == []
+
+
+def test_resolve_engagement_rejects_non_empty_canonical_scope(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    engagement = _engagement()
+    canonical = Scope(allowed=["10.10.20.5"])
+    _install_loaded_engagement(monkeypatch, engagement, _paths(tmp_path, canonical))
+    inspected = _assert_inspect_not_called(monkeypatch)
+
+    with pytest.raises(relay.RelayError, match="scope metadata does not match"):
+        relay.resolve_engagement("gui-a")
+    assert inspected == []
+
+
+@pytest.mark.parametrize("content", ["{not-json", ""])
+def test_resolve_engagement_rejects_unreadable_scope_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str
+) -> None:
+    engagement = _engagement()
+    scope_file = tmp_path / "scope.json"
+    scope_file.write_text(content, encoding="utf-8")
+    paths = SimpleNamespace(
+        workspace_dir=lambda _engagement_id: tmp_path / "workspace",
+        scope_file=lambda _engagement_id: scope_file,
+    )
+    _install_loaded_engagement(monkeypatch, engagement, paths)
+    inspected = _assert_inspect_not_called(monkeypatch)
+
+    with pytest.raises(relay.RelayError, match="cannot read canonical scope file"):
+        relay.resolve_engagement("gui-a")
+    assert inspected == []
 
 
 def test_resolve_engagement_rejects_observed_network_mismatch(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     engagement = _engagement()
-    paths = SimpleNamespace(workspace_dir=lambda _engagement_id: tmp_path / "workspace")
-    monkeypatch.setattr(
-        relay,
-        "Paths",
-        SimpleNamespace(resolve=lambda *_args, **_kwargs: paths),
-    )
-    monkeypatch.setattr(
-        relay,
-        "EngagementManager",
-        lambda _paths: SimpleNamespace(load=lambda _engagement_id: engagement),
-    )
+    _install_loaded_engagement(monkeypatch, engagement, _paths(tmp_path, engagement.scope))
     monkeypatch.setattr(
         relay,
         "_docker_inspect",
-        lambda *_args, **_kwargs: {
-            "Config": {
-                "Labels": {
-                    "haibox.managed": "true",
-                    "haibox.engagement": "gui-a",
-                }
-            },
-            "State": {"Status": "running"},
-            "HostConfig": {"NetworkMode": "bridge"},
-        },
+        lambda *_args, **_kwargs: _inspect_raw(engagement, host_network="bridge"),
     )
 
     with pytest.raises(relay.RelayError, match="network 'bridge'"):
         relay.resolve_engagement("gui-a")
 
 
+def test_resolve_engagement_rejects_additional_network_membership(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    engagement = _engagement()
+    _install_loaded_engagement(monkeypatch, engagement, _paths(tmp_path, engagement.scope))
+    expected = engagement.runtime.network_name
+    monkeypatch.setattr(
+        relay,
+        "_docker_inspect",
+        lambda *_args, **_kwargs: _inspect_raw(
+            engagement, networks=[expected, "haibox-extra-net"]
+        ),
+    )
+
+    with pytest.raises(relay.RelayError, match="attached to networks"):
+        relay.resolve_engagement("gui-a")
+
+
+def test_resolve_engagement_rejects_missing_network_membership(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    engagement = _engagement()
+    _install_loaded_engagement(monkeypatch, engagement, _paths(tmp_path, engagement.scope))
+    monkeypatch.setattr(
+        relay,
+        "_docker_inspect",
+        lambda *_args, **_kwargs: _inspect_raw(engagement, networks=[]),
+    )
+
+    with pytest.raises(relay.RelayError, match="expected only"):
+        relay.resolve_engagement("gui-a")
+
+
+def test_resolve_engagement_accepts_one_expected_network(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    engagement = _engagement()
+    _install_loaded_engagement(monkeypatch, engagement, _paths(tmp_path, engagement.scope))
+    monkeypatch.setattr(
+        relay,
+        "_docker_inspect",
+        lambda *_args, **_kwargs: _inspect_raw(engagement),
+    )
+
+    container, workspace = relay.resolve_engagement("gui-a")
+
+    assert container == "haibox-gui-a"
+    assert workspace == (tmp_path / "workspace").resolve()
+
+
 def test_resolve_engagement_can_resolve_for_cleanup_without_preflight(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     engagement = _engagement(network_mode="scoped", allowed=["10.10.20.5"])
-    paths = SimpleNamespace(workspace_dir=lambda _engagement_id: tmp_path / "workspace")
-    monkeypatch.setattr(
-        relay,
-        "Paths",
-        SimpleNamespace(resolve=lambda *_args, **_kwargs: paths),
-    )
-    monkeypatch.setattr(
-        relay,
-        "EngagementManager",
-        lambda _paths: SimpleNamespace(load=lambda _engagement_id: engagement),
-    )
+    _install_loaded_engagement(monkeypatch, engagement, _paths(tmp_path, engagement.scope))
     monkeypatch.setattr(
         relay,
         "_docker_inspect",
-        lambda *_args, **_kwargs: {
-            "Config": {
-                "Labels": {
-                    "haibox.managed": "true",
-                    "haibox.engagement": "gui-a",
-                }
-            },
-            "State": {"Status": "running"},
-            "HostConfig": {"NetworkMode": "bridge"},
-        },
+        lambda *_args, **_kwargs: _inspect_raw(
+            engagement, host_network="bridge", networks=[]
+        ),
     )
 
     container, workspace = relay.resolve_engagement(

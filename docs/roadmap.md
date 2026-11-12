@@ -209,9 +209,11 @@ and headless-Wayland display/surface tests, plus authentication,
 cross-engagement, concurrency, detach, stop, and cleanup negatives. It did not
 pass the image vulnerability gate: Grype covers Fedora 44 but reports 4
 CRITICAL and 61 HIGH findings. A 2026-11-12 hardening pass added fail-closed
-isolated/empty-scope preflight, private password and socket directories,
-credential rotation and removal, and bounded relay cleanup, covered by
-fake-runtime unit tests only.
+isolated/empty-scope preflight, canonical scope-file comparison, exact network
+membership checks, private password and socket directories, credential rotation
+and removal, and bounded relay cleanup. The hardened scripts were re-run on a
+disposable real Docker endpoint with 39 fake-runtime regressions covering the
+same paths.
 
 **Not started:**
 
