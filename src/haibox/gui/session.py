@@ -29,7 +29,7 @@ from haibox.gui.credentials import (
 )
 from haibox.gui.errors import GuiError
 from haibox.gui.preflight import verify_gui_preflight
-from haibox.gui.spec import GuiLimits, GuiSessionSpec
+from haibox.gui.spec import SUPPORTED_XPRA_VERSIONS, GuiLimits, GuiSessionSpec
 from haibox.models import Engagement
 from haibox.paths import Paths, validate_engagement_id
 from haibox.runtime.base import ContainerRuntime
@@ -289,6 +289,7 @@ class GuiSessionManager:
         password = generate_password()
         started = False
         try:
+            self._check_server_version(spec)
             self._stop_previous_server(spec)
             self._reset_runtime(spec)
             self._credential_directory()
@@ -386,6 +387,18 @@ class GuiSessionManager:
         )
 
     # -------------------------------------------------------------- container
+    def _check_server_version(self, spec: GuiSessionSpec) -> str:
+        """Refuse a container whose Xpra version is not qualified."""
+
+        output = self._exec(spec, ["xpra", "--version"], timeout=30).strip()
+        version = output.split()[-1].lstrip("v") if output else ""
+        if not version.startswith(SUPPORTED_XPRA_VERSIONS):
+            raise GuiError(
+                f"the container runs Xpra {version or 'of an unknown version'}; "
+                f"supported versions are {', '.join(SUPPORTED_XPRA_VERSIONS)}"
+            )
+        return version
+
     def _reset_runtime(self, spec: GuiSessionSpec) -> None:
         self._exec(
             spec,

@@ -24,6 +24,11 @@ DEFAULT_RUNTIME_DIR = "/tmp/xpra-runtime"
 DEFAULT_PASSWORD_FILE = f"{DEFAULT_RUNTIME_DIR}/xpra-auth"
 DEFAULT_LOG_FILE = "/tmp/xpra.log"
 
+#: Xpra server versions this runtime is qualified for.  A container that
+#: reports anything else is refused: the deny-by-default flags and the file
+#: authentication behaviour were verified against this series.
+SUPPORTED_XPRA_VERSIONS: tuple[str, ...] = ("6.5",)
+
 #: The only image identity a GUI session may use.  The engagement image must
 #: match this reference exactly; a GUI session never runs an arbitrary image.
 APPROVED_GUI_IMAGE = "haibox/gui:0.1.0"

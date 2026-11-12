@@ -304,6 +304,8 @@ class GuiFakeRuntime(FakeRuntime):
         joined = " ".join(command)
         if "python3" in command and "-c" in command:
             return ExecResult(exit_code=0, stdout=self._scan_payload(), stderr="")
+        if "xpra" in command and "--version" in command:
+            return ExecResult(exit_code=0, stdout="xpra v6.5.6\n", stderr="")
         if "socat" in joined:
             if self.listener_open:
                 return ExecResult(exit_code=0, stdout="", stderr="")

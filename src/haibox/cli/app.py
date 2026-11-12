@@ -19,6 +19,7 @@ from haibox.cli.container_cmd import container_app
 from haibox.cli.context import AppContext, get_context
 from haibox.cli.engagement_cmd import engagement_app
 from haibox.cli.execution_cmd import register as register_execution
+from haibox.cli.gui_cmd import gui_app, gui_diagnostics
 from haibox.cli.image_cmd import image_app
 from haibox.cli.store_cmd import audit_app, evidence_app, scope_app, secret_app
 from haibox.cli.vpn_cmd import vpn_app
@@ -45,6 +46,7 @@ app.add_typer(evidence_app, name="evidence")
 app.add_typer(secret_app, name="secret")
 app.add_typer(audit_app, name="audit")
 app.add_typer(vpn_app, name="vpn")
+app.add_typer(gui_app, name="gui")
 register_execution(app)
 
 console = ui.console
@@ -176,6 +178,9 @@ def doctor(
         record("docker daemon", True, f"server {server} via {endpoint}")
     except HAIBOXError as exc:
         record("docker daemon", False, str(exc))
+
+    for name, ok, detail in gui_diagnostics():
+        record(name, ok, detail)
 
     if json_output:
         typer.echo(json.dumps({"checks": checks}, indent=2, sort_keys=True))
