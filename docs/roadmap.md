@@ -211,8 +211,10 @@ pass the image vulnerability gate: Grype covers Fedora 44 but reports 4
 CRITICAL and 61 HIGH findings. A 2026-11-12 hardening pass added fail-closed
 isolated/empty-scope preflight, canonical scope-file comparison, exact network
 membership checks, private password and socket directories, credential rotation
-and removal, and bounded relay cleanup. The hardened scripts were re-run on a
-disposable real Docker endpoint with 39 fake-runtime regressions covering the
+and removal, bounded relay cleanup, and a verified session replacement that
+refuses to reset the runtime, replace the credential, or start a second server
+until the previous server is confirmed gone. The hardened scripts were re-run on
+a disposable real Docker endpoint with 50 fake-runtime regressions covering the
 same paths.
 
 **Not started:**

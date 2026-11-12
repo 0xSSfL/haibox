@@ -7,6 +7,7 @@ rules, and bounded relay teardown with fakes.
 
 from __future__ import annotations
 
+import json
 import socket
 import stat
 import subprocess
@@ -33,13 +34,19 @@ def _mode(path: Path) -> int:
 
 
 class FakeDocker:
-    """Minimal docker CLI fake for the session helper."""
+    """Minimal docker CLI fake that models the Xpra server lifecycle."""
 
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
         self.fail_start = False
         self.stop_returncode = 0
-        self.probe_returncode = 0
+        self.stop_timeout = False
+        self.stop_stops_server = True
+        self.server_alive = False
+        self.foreign_alive = False
+        self.listener_open = False
+        self.scan_fails = False
+        self.scan_output: bytes | None = None
 
     def __call__(
         self,
@@ -54,15 +61,56 @@ class FakeDocker:
         joined = " ".join(args)
         if "xpra" in args and "--version" in args:
             return subprocess.CompletedProcess(args, 0, b"xpra 6.5.4\n", b"")
+        if "python3" in args and "-c" in args:
+            return self._scan(args)
         if "xpra start" in joined:
             if self.fail_start:
                 return subprocess.CompletedProcess(args, 1, b"", b"start failed")
+            self.server_alive = True
+            self.listener_open = True
             return subprocess.CompletedProcess(args, 0, b"", b"")
         if "xpra" in args and "stop" in args:
-            return subprocess.CompletedProcess(args, self.stop_returncode, b"", b"")
+            if self.stop_timeout:
+                # The stop reached the server but the command did not answer
+                # in time; the real helper converts that into a SessionError.
+                if self.stop_stops_server:
+                    self.server_alive = False
+                    self.listener_open = False
+                raise session.SessionError("docker exec timed out after 30s")
+            if self.stop_returncode == 0 and self.stop_stops_server:
+                self.server_alive = False
+                self.listener_open = False
+            detail = b"" if self.stop_returncode == 0 else b"stop failed"
+            return subprocess.CompletedProcess(args, self.stop_returncode, b"", detail)
         if "socat" in joined:
-            return subprocess.CompletedProcess(args, self.probe_returncode, b"", b"")
+            if self.listener_open:
+                return subprocess.CompletedProcess(args, 0, b"", b"")
+            return subprocess.CompletedProcess(
+                args,
+                1,
+                b"",
+                b"socat: connect(4, AF=2 127.0.0.1:14500): Connection refused",
+            )
         return subprocess.CompletedProcess(args, 0, b"", b"")
+
+    def _scan(self, args: list[str]) -> subprocess.CompletedProcess[bytes]:
+        if self.scan_fails:
+            return subprocess.CompletedProcess(args, 1, b"", b"scan failed")
+        if self.scan_output is not None:
+            return subprocess.CompletedProcess(args, 0, self.scan_output, b"")
+        payload = {
+            "ours": [4242] if self.server_alive else [],
+            "foreign": [4343] if self.foreign_alive else [],
+        }
+        return subprocess.CompletedProcess(args, 0, json.dumps(payload).encode(), b"")
+
+
+@pytest.fixture
+def fast_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the bounded verification loops short in unit tests."""
+
+    monkeypatch.setattr(session, "STOP_VERIFY_TIMEOUT", 0.2)
+    monkeypatch.setattr(session, "STOP_POLL_INTERVAL", 0.01)
 
 
 @pytest.fixture
@@ -234,6 +282,177 @@ def test_prepare_stops_existing_server_before_resetting_runtime(
     reset_index = next(index for index, command in enumerate(commands) if "rm -rf" in command)
     assert stop_index < reset_index
     assert sum("xpra start" in command for command in commands) == 1
+
+
+def test_stop_server_confirms_termination_when_the_server_stops(
+    fake_session: FakeDocker, fast_lifecycle: None
+) -> None:
+    fake_session.server_alive = True
+    fake_session.listener_open = True
+
+    session._stop_server("haibox", "haibox-gui-a")
+
+    commands = [" ".join(call["args"]) for call in fake_session.calls]
+    stop_index = next(index for index, command in enumerate(commands) if "xpra stop" in command)
+    scan_index = next(index for index, command in enumerate(commands) if "python3" in command)
+    assert stop_index < scan_index
+    assert fake_session.server_alive is False
+    assert fake_session.listener_open is False
+
+
+def test_stop_server_fails_when_the_stop_command_fails_and_the_server_survives(
+    fake_session: FakeDocker, fast_lifecycle: None
+) -> None:
+    fake_session.server_alive = True
+    fake_session.listener_open = True
+    fake_session.stop_returncode = 1
+    fake_session.stop_stops_server = False
+
+    with pytest.raises(session.SessionError, match="still running"):
+        session._stop_server("haibox", "haibox-gui-a")
+
+
+def test_stop_server_accepts_a_stop_command_timeout_when_termination_is_confirmed(
+    fake_session: FakeDocker, fast_lifecycle: None
+) -> None:
+    fake_session.server_alive = True
+    fake_session.listener_open = True
+    fake_session.stop_timeout = True
+
+    session._stop_server("haibox", "haibox-gui-a")
+
+    assert fake_session.server_alive is False
+    assert fake_session.listener_open is False
+
+
+def test_stop_server_fails_when_a_stop_command_timeout_leaves_the_server_running(
+    fake_session: FakeDocker, fast_lifecycle: None
+) -> None:
+    fake_session.server_alive = True
+    fake_session.listener_open = True
+    fake_session.stop_timeout = True
+    fake_session.stop_stops_server = False
+
+    with pytest.raises(session.SessionError, match="still running"):
+        session._stop_server("haibox", "haibox-gui-a")
+
+
+def test_stop_server_fails_when_the_server_survives_a_successful_stop(
+    fake_session: FakeDocker, fast_lifecycle: None
+) -> None:
+    fake_session.server_alive = True
+    fake_session.listener_open = True
+    fake_session.stop_returncode = 0
+    fake_session.stop_stops_server = False
+
+    with pytest.raises(session.SessionError, match="still running"):
+        session._stop_server("haibox", "haibox-gui-a")
+
+
+def test_stop_server_is_safe_when_no_server_exists(
+    fake_session: FakeDocker, fast_lifecycle: None
+) -> None:
+    fake_session.server_alive = False
+    fake_session.listener_open = False
+
+    session._stop_server("haibox", "haibox-gui-a")
+
+    commands = [" ".join(call["args"]) for call in fake_session.calls]
+    assert any("xpra stop" in command for command in commands)
+    assert not any("xpra start" in command for command in commands)
+
+
+def test_stop_server_fails_closed_when_the_state_is_ambiguous(
+    fake_session: FakeDocker, fast_lifecycle: None
+) -> None:
+    fake_session.scan_output = b"not-json"
+
+    with pytest.raises(session.SessionError, match="cannot confirm"):
+        session._stop_server("haibox", "haibox-gui-a")
+
+
+def test_stop_server_fails_closed_when_the_container_cannot_be_inspected(
+    fake_session: FakeDocker, fast_lifecycle: None
+) -> None:
+    fake_session.scan_fails = True
+
+    with pytest.raises(session.SessionError, match="cannot confirm"):
+        session._stop_server("haibox", "haibox-gui-a")
+
+
+def test_stop_server_refuses_to_stop_a_foreign_xpra_server(
+    fake_session: FakeDocker, fast_lifecycle: None
+) -> None:
+    fake_session.foreign_alive = True
+
+    with pytest.raises(session.SessionError, match="another Xpra server owns display"):
+        session._stop_server("haibox", "haibox-gui-a")
+
+    commands = [" ".join(call["args"]) for call in fake_session.calls]
+    assert not any("kill" in command for command in commands)
+    assert fake_session.foreign_alive is True
+
+
+def test_prepare_refuses_to_reset_or_rotate_when_the_old_server_survives(
+    session_state: Path, fake_session: FakeDocker, fast_lifecycle: None
+) -> None:
+    password_path = session_state / "gui-a.password"
+    security.write_password_file(password_path, "stale-password")
+    fake_session.server_alive = True
+    fake_session.listener_open = True
+    fake_session.stop_stops_server = False
+
+    with pytest.raises(session.SessionError, match="still running"):
+        session.prepare(
+            "gui-a",
+            state_dir=session_state,
+            data_dir=None,
+            config_dir=None,
+            context="haibox",
+        )
+
+    commands = [" ".join(call["args"]) for call in fake_session.calls]
+    assert not any("rm -rf" in command for command in commands)
+    assert not any("xpra start" in command for command in commands)
+    assert not _container_passwords(fake_session)
+    assert password_path.read_text(encoding="utf-8") == "stale-password"
+
+
+def test_second_prepare_rotates_credentials_and_keeps_one_server(
+    session_state: Path, fake_session: FakeDocker, fast_lifecycle: None
+) -> None:
+    first = session.prepare(
+        "gui-a",
+        state_dir=session_state,
+        data_dir=None,
+        config_dir=None,
+        context="haibox",
+    )
+    first_password = Path(str(first["password_file"])).read_text(encoding="utf-8")
+
+    second = session.prepare(
+        "gui-a",
+        state_dir=session_state,
+        data_dir=None,
+        config_dir=None,
+        context="haibox",
+    )
+    second_password = Path(str(second["password_file"])).read_text(encoding="utf-8")
+
+    assert second_password != first_password
+    assert len(_container_passwords(fake_session)) == 2
+    assert fake_session.server_alive is True
+
+    commands = [" ".join(call["args"]) for call in fake_session.calls]
+    starts = [index for index, command in enumerate(commands) if "xpra start" in command]
+    stops = [index for index, command in enumerate(commands) if "xpra stop" in command]
+    scans = [index for index, command in enumerate(commands) if "python3" in command]
+    resets = [index for index, command in enumerate(commands) if "rm -rf" in command]
+    assert len(starts) == 2
+    assert len(stops) == 2
+    assert len(resets) == 2
+    assert stops[1] < resets[1] < starts[1]
+    assert scans[1] < resets[1]
 
 
 def test_prepare_failure_removes_stale_host_and_container_password(

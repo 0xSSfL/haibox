@@ -178,6 +178,22 @@ Starting a GUI session is a state-changing action and must produce an audit
 entry. Stopping, failing to start, and refusing an invalid target must also be
 audited. Session state belongs to the engagement, not to a global daemon.
 
+### 7.1 A session is only replaced after the old one is confirmed gone
+
+Preparing a session must never leave two Xpra servers on the same display, and
+must never delete the runtime or credential of a server that is still running.
+The prototype therefore treats the `xpra stop` exit code as advisory only:
+
+- the stop request targets the display of the engagement's own container;
+- termination is confirmed by inspecting the container for a live Xpra server
+  process on that display and for a listener on the container loopback port;
+- the confirmation is bounded by a deadline, and an unreadable or ambiguous
+  state is a refusal, not a pass;
+- an Xpra server on the same display that does not belong to this engagement is
+  reported and never stopped;
+- the credential is not replaced, the runtime is not reset, and no second
+  server is started until the previous server is confirmed gone.
+
 The prototype currently removes the socket, Xpra child, host password, and
 container password on stop and on failed prepare. The production design must
 still define:
@@ -283,6 +299,10 @@ and scope preflight, canonical scope-file comparison, additional/missing network
 membership, observed `NetworkMode` mismatch, private socket/host-file
 directories, symlink refusal, password rotation and stale-file removal, stop
 and failed-prepare cleanup, unsafe engagement IDs, Docker inspect timeout,
-stream idle/write bounds, and bounded child termination. The hardened scripts
-were then re-run on disposable real Docker engagements; those observations are
-recorded in the evidence record and validate the prototype only.
+stream idle/write bounds, and bounded child termination. The session
+replacement lifecycle was corrected afterwards: the `xpra stop` exit code is
+advisory only, and the previous server is confirmed terminated by a bounded
+container inspection before any credential, runtime, or server change. The
+hardened scripts were then re-run on disposable real Docker engagements; those
+observations are recorded in the evidence record and validate the prototype
+only.
