@@ -221,13 +221,18 @@ same paths.
 [phases](superpowers/plans/2026-11-12-gui-production-program.md) — image
 security and vulnerability remediation first, then the production runtime in
 `src/haibox/gui/`, then the CLI, desktop compatibility, adversarial testing,
-and an independent acceptance review. The baseline is `main` at `73aa4cf` with
-`make check` at 392 passed and 2 skipped. The image gate stays closed and no
-GUI command ships until it is resolved.
+and an independent acceptance review.
+
+**Program status (2026-11-12):** the runtime now lives in `src/haibox/gui/`
+and `haibox gui start|attach|stop|status` exist, but every command refuses
+while the GUI image is experimental, so the feature is not enabled. The
+eligibility rules, the private credential handling, the verified
+stop-before-reset, the bounded relay, the explicit limits, the audit events,
+and the adversarial tests are in place and verified; the image rebuild on the
+Fedora 46 stable release is still outstanding.
 
 **Not started:**
 
-- `haibox gui start|attach|stop|status` commands, audit events, and tests;
 - `ContainerSpec` GUI fields or a supported GUI runtime seam;
 - the rebuild of the GUI image on the Fedora 46 stable release (the candidate
   image scans clean but its base is still a pre-release snapshot);

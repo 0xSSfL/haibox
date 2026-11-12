@@ -124,6 +124,7 @@ class _HostileRuntime(FakeRuntime):
             _write_scope(paths, engagement)
         self.containers[engagement.runtime.container_name] = _container(engagement)
         self.server_pids: set[int] = set()
+        self.stopper_pids: set[int] = set()
         self.listener_open = False
 
     def exec_detached(
@@ -136,6 +137,7 @@ class _HostileRuntime(FakeRuntime):
     def exec_capture(
         self, name: str, command: list[str], timeout: int | None = None
     ) -> ExecResult:
+        self._record("exec_capture", name, tuple(command), timeout)
         joined = " ".join(command)
         if "python3" in command and "-c" in command:
             return ExecResult(
@@ -144,6 +146,7 @@ class _HostileRuntime(FakeRuntime):
                     {
                         "ours": sorted(self.server_pids),
                         "foreign": [],
+                        "stoppers": sorted(self.stopper_pids),
                         "argv": {},
                         "uncertain": False,
                     }
@@ -514,3 +517,47 @@ def test_the_credential_directory_is_not_world_readable(paths: Paths) -> None:
     path = manager.credential_path(ENGAGEMENT_ID)
     manager._credential_directory()
     assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
+
+
+def test_a_lingering_stop_request_is_terminated_before_the_reset(
+    paths: Paths,
+) -> None:
+    """A stop request that is still waiting must not kill the next session.
+
+    ``xpra stop`` waits for a server socket to appear.  When such a request is
+    left over from an earlier attempt, it would shut down the server that the
+    next prepare starts, so it is terminated first.
+    """
+
+    engagement = _engagement()
+    runtime = _HostileRuntime(engagement, paths)
+    runtime.stopper_pids = {777}
+    manager = _manager(
+        paths, runtime, engagement, limits=GuiLimits(shutdown_timeout=1)
+    )
+
+    manager.prepare(ENGAGEMENT_ID)
+
+    commands = [" ".join(str(part) for part in call[1]) for call in runtime.calls]
+    assert any("kill 777" in command for command in commands)
+    # The reset only happens after the leftover stop request is gone.
+    kill_index = next(
+        index for index, command in enumerate(commands) if "kill 777" in command
+    )
+    reset_index = next(
+        index for index, command in enumerate(commands) if "rm -rf /tmp/xpra-runtime" in command
+    )
+    assert kill_index < reset_index
+
+
+def test_no_stop_request_is_sent_when_no_server_is_running(paths: Paths) -> None:
+    """Without a server there is nothing to stop, and nothing to wait for."""
+
+    engagement = _engagement()
+    runtime = _HostileRuntime(engagement, paths)
+    manager = _manager(paths, runtime, engagement)
+
+    manager.prepare(ENGAGEMENT_ID)
+
+    commands = [" ".join(str(part) for part in call[1]) for call in runtime.calls]
+    assert not any("xpra stop" in command for command in commands)

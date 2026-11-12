@@ -271,6 +271,7 @@ class GuiFakeRuntime(FakeRuntime):
         super().__init__()
         self.server_pids: set[int] = set()
         self.foreign_pids: set[int] = set()
+        self.stopper_pids: set[int] = set()
         self.listener_open = False
         self.argv: dict[str, list[str]] = {}
         self.scan_calls = 0
@@ -283,6 +284,7 @@ class GuiFakeRuntime(FakeRuntime):
             {
                 "ours": sorted(self.server_pids),
                 "foreign": sorted(self.foreign_pids),
+                "stoppers": sorted(self.stopper_pids),
                 "argv": self.argv,
                 "uncertain": False,
             }
@@ -301,6 +303,7 @@ class GuiFakeRuntime(FakeRuntime):
     def exec_capture(
         self, name: str, command: list[str], timeout: int | None = None
     ) -> ExecResult:
+        self._record("exec_capture", name, tuple(command), timeout)
         joined = " ".join(command)
         if "python3" in command and "-c" in command:
             return ExecResult(exit_code=0, stdout=self._scan_payload(), stderr="")

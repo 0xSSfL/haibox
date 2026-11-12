@@ -17,7 +17,7 @@ import contextlib
 import json
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from haibox.engagement import EngagementManager
@@ -52,6 +52,7 @@ runtime = %s
 runtime_pattern = re.compile(r"(?:^|[=/])" + re.escape(runtime) + r"(?:/|$)")
 ours = []
 foreign = []
+stoppers = []
 argv_by_pid = {}
 uncertain = False
 me = os.getpid()
@@ -75,6 +76,10 @@ for entry in os.listdir(root):
             continue
         if index + 2 >= len(argv):
             break
+        if argv[index + 1] == "stop" and argv[index + 2] == display:
+            # A stop request that is still waiting for a server to appear.
+            stoppers.append(pid)
+            break
         if argv[index + 1] != "start" or argv[index + 2] != display:
             continue
         if any(runtime_pattern.search(element) for element in argv):
@@ -86,6 +91,7 @@ for entry in os.listdir(root):
 print(json.dumps({
     "ours": sorted(ours),
     "foreign": sorted(foreign),
+    "stoppers": sorted(stoppers),
     "argv": argv_by_pid,
     "uncertain": uncertain,
 }))
@@ -98,7 +104,8 @@ class ServerReport:
 
     ours: tuple[int, ...]
     foreign: tuple[int, ...]
-    argv: dict[str, list[str]]
+    stoppers: tuple[int, ...] = ()
+    argv: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -201,16 +208,21 @@ class GuiSessionManager:
             raise GuiError("the container reported unreadable Xpra server state")
         ours = payload.get("ours")
         foreign = payload.get("foreign")
+        stoppers = payload.get("stoppers")
         argv = payload.get("argv")
-        if not isinstance(ours, list) or not isinstance(foreign, list):
-            raise GuiError("the container reported unreadable Xpra server state")
-        if not isinstance(argv, dict):
+        if (
+            not isinstance(ours, list)
+            or not isinstance(foreign, list)
+            or not isinstance(stoppers, list)
+            or not isinstance(argv, dict)
+        ):
             raise GuiError("the container reported unreadable Xpra server state")
         if payload.get("uncertain"):
             raise GuiError("a container process could not be inspected")
         return ServerReport(
             ours=tuple(int(pid) for pid in ours),
             foreign=tuple(int(pid) for pid in foreign),
+            stoppers=tuple(int(pid) for pid in stoppers),
             argv={str(key): [str(part) for part in value] for key, value in argv.items()},
         )
 
@@ -229,48 +241,72 @@ class GuiSessionManager:
             f"cannot confirm that the container loopback port {spec.port} is free"
         )
 
+    def _terminate_stoppers(self, spec: GuiSessionSpec, pids: tuple[int, ...]) -> None:
+        """Terminate our own lingering stop requests.
+
+        ``xpra stop`` waits for a server socket to appear.  A stop request that
+        is still waiting when a new server starts would shut the new server
+        down, so a leftover stop request of ours is terminated before the
+        runtime is reset.
+        """
+
+        if not pids:
+            return
+        self.runtime.exec_capture(
+            spec.container,
+            ["sh", "-c", "kill " + " ".join(str(pid) for pid in pids)],
+            timeout=30,
+        )
+
     def _stop_previous_server(self, spec: GuiSessionSpec) -> None:
         """Stop the previous server and prove that it terminated.
 
         The ownership check runs first, so an Xpra server on this display that
         does not belong to this engagement is reported and never signalled.
+        The stop request is bounded inside the container as well, because
+        ``xpra stop`` waits for a server socket to appear and would otherwise
+        outlive the request and shut down the next session.
         """
 
         state = self._server_state(spec)
-        foreign = state.foreign
-        if foreign:
+        if state.foreign:
             raise GuiError(
-                f"another Xpra server owns display {spec.display} (pids {foreign}); "
+                f"another Xpra server owns display {spec.display} (pids {state.foreign}); "
                 "refusing to stop a session that this engagement does not own"
             )
-        self.runtime.exec_capture(
-            spec.container,
-            [
-                "env",
-                f"XDG_RUNTIME_DIR={spec.runtime_dir}",
-                "HOME=/tmp",
-                "xpra",
-                "stop",
-                spec.display,
-            ],
-            timeout=spec.limits.shutdown_timeout,
-        )
+        if state.ours:
+            self.runtime.exec_capture(
+                spec.container,
+                [
+                    "env",
+                    f"XDG_RUNTIME_DIR={spec.runtime_dir}",
+                    "HOME=/tmp",
+                    "sh",
+                    "-c",
+                    f"timeout {spec.limits.shutdown_timeout} xpra stop {spec.display}",
+                ],
+                timeout=spec.limits.shutdown_timeout + 5,
+            )
         deadline = time.monotonic() + spec.limits.shutdown_timeout
         while True:
             state = self._server_state(spec)
-            foreign = state.foreign
-            if foreign:
+            if state.foreign:
                 raise GuiError(
-                    f"another Xpra server owns display {spec.display} (pids {foreign}); "
+                    f"another Xpra server owns display {spec.display} (pids {state.foreign}); "
                     "refusing to continue with a display this engagement does not own"
                 )
-            ours = state.ours
-            if not ours:
+            if state.stoppers:
+                # Our own stop request is still waiting for a server to appear.
+                self._terminate_stoppers(spec, state.stoppers)
+                if time.monotonic() < deadline:
+                    time.sleep(0.5)
+                    continue
+            if not state.ours:
                 break
             if time.monotonic() >= deadline:
                 raise GuiError(
                     f"the previous Xpra server on display {spec.display} is still "
-                    f"running (pids {ours})"
+                    f"running (pids {state.ours})"
                 )
             time.sleep(0.5)
         if self._listener_open(spec):
