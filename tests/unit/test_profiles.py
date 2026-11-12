@@ -15,6 +15,7 @@ def test_builtin_profiles_are_available(paths: Paths) -> None:
         "ad-security",
         "core",
         "full",
+        "gui",
         "network-security",
         "osint",
         "web-security",
@@ -25,6 +26,16 @@ def test_builtin_profiles_are_available(paths: Paths) -> None:
     assert profiles["ad-security"].status == "experimental"
     assert profiles["osint"].status == "experimental"
     assert profiles["full"].status == "experimental"
+    assert profiles["gui"].status == "experimental"
+
+
+def test_gui_profile_shape(paths: Paths) -> None:
+    profile = load_profile("gui", paths)
+    assert profile.name == "gui"
+    assert profile.image == "haibox/gui:0.1.0"
+    assert profile.network == "isolated"
+    assert profile.capabilities == []
+    assert "xpra" in profile.tools
 
 
 def test_web_security_profile_shape(paths: Paths) -> None:

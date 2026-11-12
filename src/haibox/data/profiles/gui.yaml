@@ -1,0 +1,17 @@
+api_version: haibox/v1
+name: gui
+description: Optional GUI session profile with an Xpra seamless server.
+image: haibox/gui:0.1.0
+status: experimental
+network: isolated
+resources:
+  cpus: 2.0
+  memory: 2g
+  pids_limit: 512
+capabilities: []
+environment: {}
+tools:
+  - xpra
+  - xterm
+  - xorg-x11-server-Xvfb
+  - socat

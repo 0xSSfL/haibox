@@ -229,7 +229,8 @@ GUI command ships until it is resolved.
 
 - `haibox gui start|attach|stop|status` commands, audit events, and tests;
 - `ContainerSpec` GUI fields or a supported GUI runtime seam;
-- a catalog GUI image with a clean or formally accepted scan;
+- the rebuild of the GUI image on the Fedora 46 stable release (the candidate
+  image scans clean but its base is still a pre-release snapshot);
 - hostile-stream testing, resource limits, and a host-client version matrix;
 - a real Fedora Workstation Wayland input test;
 - Debian packaging and host-client distribution.

@@ -50,6 +50,7 @@ def test_catalog_lists_images() -> None:
         "ad-security",
         "core",
         "full",
+        "gui",
         "network-security",
         "osint",
         "web-security",

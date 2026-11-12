@@ -35,6 +35,12 @@
       <path d="m7 9 3 3-3 3m6 0h4"/>
     </g>
   </symbol>
+  <symbol id="toolkit-gui" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+      <rect x="2.5" y="4" width="19" height="13" rx="2"/>
+      <path d="M8.5 20.5h7M12 17v3.5"/>
+    </g>
+  </symbol>
   <symbol id="toolkit-web" viewBox="0 0 24 24">
     <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
       <circle cx="12" cy="12" r="8.8"/>
