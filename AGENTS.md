@@ -90,9 +90,12 @@ uv run haibox doctor
   `image scan` uses Trivy then Grype, fails when neither scanner can prove OS
   package coverage, and exits 1 on HIGH/CRITICAL findings or a report whose exit
   code contradicts its contents.
-- All six images have recorded Trivy baselines in `docs/image-catalog.md`, and
-  the gate is open for every one. `images/README.md` and `docs/user-guide.md`
-  still say only Web Security was scanned; trust the catalog matrix.
+- All six images have recorded Trivy baselines in `docs/image-catalog.md`, and a
+  recorded gate decision exists for every one. Every catalog image still has
+  unresolved HIGH/CRITICAL findings, so no image is scan-clean and the release
+  gate stays red; `docs/image-catalog.md` and `docs/image-validation.md` are
+  authoritative. `images/README.md` and `docs/user-guide.md` still say only
+  Web Security was scanned; trust the catalog matrix.
 - Do not add `--ignore-unfixed`, global ignores, or suppress package/Go-module
   findings. `web-security`, `osint`, and `full` have scoped
   `images/*/trivyignore.yaml` files only for the pinned Nuclei secret fixtures;

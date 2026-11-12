@@ -217,6 +217,14 @@ until the previous server is confirmed gone. The hardened scripts were re-run on
 a disposable real Docker endpoint with 64 fake-runtime regressions covering the
 same paths.
 
+**Program (2026-11-12):** the GUI production program runs in
+[phases](superpowers/plans/2026-11-12-gui-production-program.md) — image
+security and vulnerability remediation first, then the production runtime in
+`src/haibox/gui/`, then the CLI, desktop compatibility, adversarial testing,
+and an independent acceptance review. The baseline is `main` at `73aa4cf` with
+`make check` at 392 passed and 2 skipped. The image gate stays closed and no
+GUI command ships until it is resolved.
+
 **Not started:**
 
 - `haibox gui start|attach|stop|status` commands, audit events, and tests;
