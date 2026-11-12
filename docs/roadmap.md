@@ -214,7 +214,7 @@ membership checks, private password and socket directories, credential rotation
 and removal, bounded relay cleanup, and a verified session replacement that
 refuses to reset the runtime, replace the credential, or start a second server
 until the previous server is confirmed gone. The hardened scripts were re-run on
-a disposable real Docker endpoint with 50 fake-runtime regressions covering the
+a disposable real Docker endpoint with 57 fake-runtime regressions covering the
 same paths.
 
 **Not started:**

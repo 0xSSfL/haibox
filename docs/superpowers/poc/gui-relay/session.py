@@ -12,6 +12,12 @@ Session preflight is the same as the relay: the engagement must use the
 files are created with mode 0600 in an owner-controlled 0700 directory, and
 both host and container copies are removed on stop or failed prepare.
 
+A session is only replaced after the previous server is confirmed terminated.
+The ``xpra stop`` exit code is advisory: termination is confirmed by an
+ownership check and a bounded inspection of the container. An ambiguous result
+is a refusal, and until the old server is gone nothing is replaced, reset, or
+deleted.
+
 Usage:
     uv run python .../session.py prepare --engagement gui-a --state-dir ...
     uv run python .../session.py verify --engagement gui-a
@@ -98,25 +104,37 @@ class SessionError(SecurityError):
 # A server is "ours" when its argv references this engagement's runtime
 # directory; any other Xpra server on the same display is reported as foreign
 # and is never stopped by this prototype.
+#
+# The display and the runtime directory are rendered from the module constants
+# so the pattern can never drift away from the server this helper starts. The
+# proc root is an argument so the same script can be exercised against a test
+# fixture.
 _SERVER_SCAN = r"""
 import json
 import os
+import sys
 
-display = ":100"
-runtime = "/tmp/xpra-runtime"
+root = sys.argv[1] if len(sys.argv) > 1 else "/proc"
+display = %s
+runtime = %s
 ours = []
 foreign = []
+uncertain = False
 me = os.getpid()
-for entry in os.listdir("/proc"):
+for entry in os.listdir(root):
     if not entry.isdigit():
         continue
     pid = int(entry)
     if pid == me:
         continue
     try:
-        with open("/proc/" + str(pid) + "/cmdline", "rb") as handle:
+        with open(os.path.join(root, entry, "cmdline"), "rb") as handle:
             raw = handle.read()
+    except FileNotFoundError:
+        continue
     except OSError:
+        # A process that cannot be inspected must not be treated as absent.
+        uncertain = True
         continue
     argv = [part.decode("utf-8", "replace") for part in raw.split(b"\0") if part]
     for index, part in enumerate(argv):
@@ -131,8 +149,14 @@ for entry in os.listdir("/proc"):
         else:
             foreign.append(pid)
         break
-print(json.dumps({"ours": sorted(ours), "foreign": sorted(foreign)}))
+print(json.dumps({"ours": sorted(ours), "foreign": sorted(foreign), "uncertain": uncertain}))
 """
+
+
+def _server_scan_script() -> str:
+    """Render the container-side scan from the constants used to start Xpra."""
+
+    return _SERVER_SCAN % (json.dumps(DISPLAY), json.dumps(RUNTIME_DIR))
 
 
 def _docker(
@@ -182,7 +206,9 @@ def _password_path(state_dir: Path, engagement: str) -> Path:
     return Path(state_dir).expanduser().absolute() / f"{valid}.password"
 
 
-def _server_state(context: str, container: str) -> tuple[str, dict[str, object]]:
+def _server_state(
+    context: str, container: str, *, timeout: float = PROBE_TIMEOUT
+) -> tuple[str, dict[str, object]]:
     """Report the Xpra server state for this display inside the container.
 
     Returns ``stopped``, ``running`` (this engagement's server), ``foreign``
@@ -193,8 +219,8 @@ def _server_state(context: str, container: str) -> tuple[str, dict[str, object]]
     try:
         result = _docker(
             context,
-            ["exec", container, "python3", "-c", _SERVER_SCAN],
-            timeout=PROBE_TIMEOUT,
+            ["exec", container, "python3", "-c", _server_scan_script(), "/proc"],
+            timeout=timeout,
         )
     except SessionError:
         return "ambiguous", {"reason": "the container could not be inspected"}
@@ -215,14 +241,20 @@ def _server_state(context: str, container: str) -> tuple[str, dict[str, object]]
     foreign = payload.get("foreign")
     if not isinstance(ours, list) or not isinstance(foreign, list):
         return "ambiguous", {"reason": "the container reported unreadable server state"}
+    if payload.get("uncertain"):
+        return "ambiguous", {"reason": "a container process could not be inspected"}
+    if foreign:
+        # A foreign server is reported even when this engagement's own server
+        # is running: a stop request for the display could reach it too.
+        return "foreign", {"pids": foreign}
     if ours:
         return "running", {"pids": ours}
-    if foreign:
-        return "foreign", {"pids": foreign}
     return "stopped", {}
 
 
-def _listener_state(context: str, container: str) -> str:
+def _listener_state(
+    context: str, container: str, *, timeout: float = PROBE_TIMEOUT
+) -> str:
     """Report whether the container loopback port still accepts connections."""
 
     try:
@@ -235,7 +267,7 @@ def _listener_state(context: str, container: str) -> str:
                 "-c",
                 f"timeout 2 socat -u /dev/null TCP:127.0.0.1:{PORT}",
             ],
-            timeout=PROBE_TIMEOUT,
+            timeout=timeout,
         )
     except SessionError:
         return "ambiguous"
@@ -247,24 +279,24 @@ def _listener_state(context: str, container: str) -> str:
     return "ambiguous"
 
 
-def _verify_server_stopped(
-    context: str,
-    container: str,
-    *,
-    timeout: float | None = None,
-    poll: float | None = None,
-) -> None:
+def _verify_server_stopped(context: str, container: str) -> None:
     """Fail closed unless the previous Xpra server is confirmed terminated.
 
-    The check is bounded by ``timeout``. A live server, a foreign server, or
-    an unreadable state all raise ``SessionError`` instead of returning.
+    The check is bounded by ``STOP_VERIFY_TIMEOUT``; every probe inside the
+    loop is bounded by the time that is left. A live server, a foreign server,
+    or an unreadable state all raise ``SessionError`` instead of returning.
     """
 
-    limit = STOP_VERIFY_TIMEOUT if timeout is None else timeout
-    interval = STOP_POLL_INTERVAL if poll is None else poll
-    deadline = time.monotonic() + limit
+    deadline = time.monotonic() + STOP_VERIFY_TIMEOUT
+    pending = (
+        f"the previous Xpra server on display {DISPLAY} could not be confirmed stopped"
+    )
     while True:
-        state, details = _server_state(context, container)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise SessionError(f"{pending} within {STOP_VERIFY_TIMEOUT:g}s")
+        probe_timeout = max(0.5, min(PROBE_TIMEOUT, remaining))
+        state, details = _server_state(context, container, timeout=probe_timeout)
         if state == "ambiguous":
             raise SessionError(
                 "cannot confirm that the previous Xpra server stopped: "
@@ -277,46 +309,47 @@ def _verify_server_stopped(
                 "that this engagement does not own"
             )
         if state == "running":
-            if time.monotonic() >= deadline:
-                raise SessionError(
-                    f"the previous Xpra server on display {DISPLAY} is still "
-                    f"running (pids {details.get('pids', [])})"
-                )
-            time.sleep(interval)
+            pending = (
+                f"the previous Xpra server on display {DISPLAY} is still running "
+                f"(pids {details.get('pids', [])})"
+            )
+            time.sleep(min(STOP_POLL_INTERVAL, max(0.0, deadline - time.monotonic())))
             continue
-        listener = _listener_state(context, container)
+        listener = _listener_state(context, container, timeout=probe_timeout)
         if listener == "ambiguous":
             raise SessionError(
                 "cannot confirm that the previous Xpra server released the "
                 f"container loopback port {PORT}"
             )
         if listener == "open":
-            if time.monotonic() >= deadline:
-                raise SessionError(
-                    f"the container loopback port {PORT} still accepts "
-                    "connections"
-                )
-            time.sleep(interval)
+            pending = f"the container loopback port {PORT} still accepts connections"
+            time.sleep(min(STOP_POLL_INTERVAL, max(0.0, deadline - time.monotonic())))
             continue
         return
 
 
-def _stop_server(
-    context: str,
-    container: str,
-    *,
-    verify: bool = True,
-    timeout: float | None = None,
-    poll: float | None = None,
-) -> None:
+def _stop_server(context: str, container: str) -> None:
     """Stop the previous Xpra server and prove that it terminated.
 
-    The ``xpra stop`` exit code is never trusted on its own: the server is
+    The ownership check runs first: an Xpra server on this display that does
+    not belong to this engagement is reported and never signalled. The
+    ``xpra stop`` exit code is never trusted on its own either; the server is
     confirmed gone by inspecting the container for a live Xpra server process
-    on this display and for a listener on the container loopback port. The stop
-    command only targets the display of this engagement's container, and a
-    foreign Xpra server is never stopped.
+    on this display and for a listener on the container loopback port.
     """
+
+    state, details = _server_state(context, container)
+    if state == "ambiguous":
+        raise SessionError(
+            "cannot confirm that the previous Xpra server stopped: "
+            f"{details.get('reason', 'unknown reason')}"
+        )
+    if state == "foreign":
+        raise SessionError(
+            f"another Xpra server owns display {DISPLAY} "
+            f"(pids {details.get('pids', [])}); refusing to stop a session "
+            "that this engagement does not own"
+        )
 
     outcome = "xpra stop reported success"
     try:
@@ -339,10 +372,8 @@ def _stop_server(
             outcome = f"xpra stop exited {result.returncode}: {detail[:200]}"
     except SessionError as exc:
         outcome = str(exc)
-    if not verify:
-        return
     try:
-        _verify_server_stopped(context, container, timeout=timeout, poll=poll)
+        _verify_server_stopped(context, container)
     except SessionError as exc:
         raise SessionError(f"{exc} ({outcome})") from exc
 
@@ -402,44 +433,33 @@ def _cleanup_container(
 ) -> None:
     """Remove the server, runtime directory, and password.
 
-    The server is only removed when its termination can be confirmed. When it
-    cannot, the credential is still revoked, but the rest of the runtime state
-    is left alone so a live server is not left with deleted state, and the
-    failure is reported to the caller.
+    The runtime is only removed when the server's termination is confirmed.
+    When it cannot be confirmed, nothing in the container is touched: deleting
+    the runtime or the credential of a server that is still running would
+    destroy live state, so the failure is reported instead.
     """
 
-    stopped = True
     try:
         if stop_server:
             _stop_server(context, container)
         else:
             _verify_server_stopped(context, container)
-    except SessionError:
-        stopped = False
-    if stopped:
-        with contextlib.suppress(SecurityError):
-            _docker(
-                context,
-                [
-                    "exec",
-                    container,
-                    "sh",
-                    "-c",
-                    f"rm -f {PASSWORD_FILE}; rm -rf {RUNTIME_DIR}",
-                ],
-                timeout=CLEANUP_TIMEOUT,
-            )
-        return
+    except SessionError as exc:
+        raise SessionError(
+            f"{exc}; the container runtime and its credential were left in place"
+        ) from exc
     with contextlib.suppress(SecurityError):
         _docker(
             context,
-            ["exec", container, "sh", "-c", f"rm -f {PASSWORD_FILE}"],
+            [
+                "exec",
+                container,
+                "sh",
+                "-c",
+                f"rm -f {PASSWORD_FILE}; rm -rf {RUNTIME_DIR}",
+            ],
             timeout=CLEANUP_TIMEOUT,
         )
-    raise SessionError(
-        "the Xpra server could not be confirmed stopped; the credential was "
-        "removed but the container runtime was left in place"
-    )
 
 
 def _wait_for_listener(context: str, container: str) -> None:
@@ -700,6 +720,8 @@ def main(argv: list[str] | None = None) -> int:
             result = {"stopped": args.engagement}
     except SecurityError as exc:
         print(f"session: {exc}", file=sys.stderr)
+        for note in getattr(exc, "__notes__", []):
+            print(f"session: {note}", file=sys.stderr)
         return 2
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0

@@ -217,7 +217,7 @@ remain untouched.
 | Fail-closed target preflight | `isolated` network and empty `allowed`/`allowed_ports` are required before Docker inspection; canonical scope metadata must equal the mount source; observed `HostConfig.NetworkMode` must match and `NetworkSettings.Networks` must contain only the engagement network | `test_relay_preflight_*`, `test_resolve_engagement_rejects_scope_before_docker_inspect`, `test_resolve_engagement_rejects_metadata_scope_mismatch_before_inspect`, `test_resolve_engagement_rejects_non_empty_canonical_scope`, `test_resolve_engagement_rejects_unreadable_scope_file`, `test_resolve_engagement_rejects_observed_network_mismatch`, `test_resolve_engagement_rejects_additional_network_membership`, `test_resolve_engagement_rejects_missing_network_membership` |
 | Host password creation | `O_EXCL`/`O_NOFOLLOW`, mode 0600 from creation, verified owner-owned 0700 parent, symlink/non-regular replacement refused | `test_password_file_is_private_and_rotation_replaces_content`, `test_password_file_refuses_symlink_without_touching_target`, `test_password_file_requires_private_parent`, `test_private_directory_rejects_symlink` |
 | Container password | Private `/tmp/xpra-runtime` recreated at 0700, `noclobber` write over stdin, mode checked after creation | `test_prepare_writes_container_password_in_private_runtime` |
-| Rotation and stale credentials | Every prepare stops the previous server and confirms its termination (process scan plus container loopback probe, bounded deadline, ambiguous state refused) before the runtime is reset or the password is replaced; the password rotates and only a regular host file is replaced | `test_prepare_creates_private_host_file_and_rotates_secrets`, `test_prepare_stops_existing_server_before_resetting_runtime`, `test_stop_server_*`, `test_prepare_refuses_to_reset_or_rotate_when_the_old_server_survives`, `test_second_prepare_rotates_credentials_and_keeps_one_server`, `test_prepare_failure_removes_stale_host_and_container_password` |
+| Rotation and stale credentials | Every prepare stops the previous server and confirms its termination (ownership check, process scan, and container loopback probe, bounded deadline, ambiguous state refused) before the runtime is reset or the password is replaced; the password rotates and only a regular host file is replaced | `test_prepare_creates_private_host_file_and_rotates_secrets`, `test_prepare_stops_existing_server_before_resetting_runtime`, `test_stop_server_*`, `test_server_scan_script_*`, `test_prepare_refuses_to_reset_or_rotate_when_the_old_server_survives`, `test_second_prepare_rotates_credentials_and_keeps_one_server`, `test_prepare_failure_removes_stale_host_and_container_password` |
 | Stop and failure cleanup | Host and container password files removed on stop, even when `xpra stop` fails; failed prepare removes both; unsafe engagement IDs are rejected before any path is built | `test_stop_removes_host_and_container_password_even_if_xpra_stop_fails`, `test_stop_rejects_unsafe_engagement_id_before_removing_anything`, `test_prepare_refuses_non_private_state_directory` |
 | Socket path | No `/tmp` fallback; `XDG_RUNTIME_DIR` or an explicit socket path must be inside an owner-controlled 0700 directory; existing paths are refused | `test_socket_path_requires_xdg_runtime_dir`, `test_socket_path_rejects_shared_parent`, `test_socket_path_accepts_private_parent`, `test_relay_refuses_existing_socket_path` |
 | Bounded relay I/O | Docker inspect 10 s, stream idle 120 s, blocked write 10 s, child wait/terminate/kill 5/2/2 s, non-blocking stream copies, disconnect marks the stream done | `test_docker_inspect_timeout_is_bounded`, `test_relay_pump_idle_timeout_marks_stream_done`, `test_relay_pump_eof_marks_stream_done`, `test_relay_blocked_write_times_out`, `test_relay_child_cleanup_is_bounded` |
@@ -254,8 +254,8 @@ external network path was used.
 | Network isolation | `gui-hc-1` and `gui-hc-2` were on different isolated networks (`172.19.0.1` and `172.20.0.1`). A listener on `gui-hc-2:9999` was reachable from its own loopback (exit 0), but a TCP probe from `gui-hc-1` failed with `Network is unreachable` (exit 1), and name resolution of `haibox-gui-hc-2` from `gui-hc-1` failed (exit 2). |
 | Container invariants | `Privileged=false`, `ReadonlyRootfs=true`, empty `PortBindings`, `PublishAllPorts=false`, `PidMode=""`, `IpcMode=private`, `CapDrop=["ALL"]`, no `CapAdd`, `no-new-privileges:true`, user `1000:1000`. `/var/run/docker.sock`, `/run/user/1000`, and the host display socket were absent; the workspace mount was read-write and `scope.json` read-only. |
 
-`make check` on 2026-11-12: **378 passed, 2 skipped**; `ruff check .` and
-`mypy src` passed. The 50 GUI prototype regressions are included in that count.
+`make check` on 2026-11-12: **385 passed, 2 skipped**; `ruff check .` and
+`mypy src` passed. The 57 GUI prototype regressions are included in that count.
 
 These observations validate the disposable prototype paths only. They do not
 close the production blockers: hostile-stream testing, audited lifecycle
@@ -265,13 +265,15 @@ and productionized crash/reconnect behavior remain open.
 ### Session replacement lifecycle (2026-11-12)
 
 The `xpra stop` exit code is not a termination proof, so the session helper now
-confirms that the previous server is gone before it touches anything else. The
-confirmation scans the container for a live Xpra *server* process on the
-engagement display and probes the container loopback port, under a bounded
-deadline. An unreadable or ambiguous result is a refusal. The credential is not
-replaced, the runtime is not reset, and no second server is started until the
-old server is confirmed gone, and an Xpra server on the same display that does
-not belong to the engagement is reported and never stopped.
+confirms that the previous server is gone before it touches anything else. An
+ownership check runs first: an Xpra server on the engagement display that does
+not belong to the engagement is reported and no stop request is sent, so it is
+never signalled. Otherwise the server is stopped and its termination is
+confirmed by scanning the container for a live Xpra *server* process on that
+display and by probing the container loopback port, under a bounded deadline.
+An unreadable or ambiguous state is a refusal. Until the old server is
+confirmed gone, the credential is not replaced, the runtime is not reset, no
+second server is started, and nothing inside the container is deleted.
 
 The disposable engagement `gui-lc-1` (Docker 29.9.2, `haibox` context,
 `haibox/gui-poc-validation:0.1.0`, state under `/tmp/opencode/gui-lc-final`)
@@ -279,12 +281,12 @@ produced these observations:
 
 | Scenario | Observed result |
 |---|---|
-| Successful prepare | Exit 0. Host and container passwords were mode 0600 and 32 bytes; `verify` reported `sharing=False`, 14 deny-by-default flags, and no negotiated client subsystems. |
-| Second prepare (rotation) | The previous server was stopped and confirmed gone before the reset; the host password changed, the container credential changed, and exactly one Xpra server process remained. The old password was refused with exit 28 and `Authentication failed`; the new password opened `xterm on haibox-gui-lc-1`. |
-| Stop command fails, server survives | The server process (pid 261) was frozen with `SIGSTOP`, so it could not answer the stop request. `xpra stop` never returned (`docker exec ... timed out after 30s`) and the old server was still alive. Prepare exited 2 with `the previous Xpra server on display :100 is still running (pids [261])`. The host password was unchanged, the container credential hash was unchanged (`c82ce903…`), the runtime directory kept its socket and pid files, and no second server was started. |
-| Stop command reports success while a foreign server runs | A foreign Xpra server (pid 657) owned display `:100` from a different runtime directory. `xpra stop` reported success, but prepare still exited 2 with `another Xpra server owns display :100 (pids [657]); refusing to stop a session that this engagement does not own`. The foreign server was still alive afterwards and was never signalled, and the container credential hash was unchanged. |
+| Successful prepare | Exit 0 with exactly one Xpra server process. Host and container passwords were mode 0600 and 32 bytes; `verify` reported `sharing=False`, 14 deny-by-default flags, and no negotiated client subsystems. |
+| Second prepare (rotation) | Exit 0. The previous server was stopped and confirmed gone before the runtime was reset, the host and container credentials changed, and exactly one server process remained. The old password was refused with exit 28 and `Authentication failed`; the new password opened `xterm on haibox-gui-lc-1`. |
+| Stop command fails, server survives | The server process (pid 276) was frozen with `SIGSTOP`, so it could not answer the stop request. `xpra stop` never returned (`docker exec ... timed out after 30s`) and the old server was still alive. Prepare exited 2 with `the previous Xpra server on display :100 is still running (pids [276]) within 20s`. The host password was unchanged, the container credential hash was unchanged (`cd3f1e42…`), the runtime directory kept its socket and pid files, and no second server was started. |
+| A foreign server owns the display | A foreign Xpra server (pid 684) ran on display `:100` from a different runtime directory. Prepare exited 2 with `another Xpra server owns display :100 (pids [684]); refusing to stop a session that this engagement does not own`. The foreign server was alive before and afterwards, no stop request was sent, and the container credential hash was unchanged. |
 | Forced start failure | `/tmp/xpra.log` was replaced by a directory to force a start failure. Prepare exited 2 (`Xpra did not listen on container loopback`), removed the host password, and left no container runtime directory and no server process. |
-| Stop cleanup | Stop removed the host password, the container password, the container runtime directory, and the server. |
+| Stop cleanup | Stop exited 0 and removed the host password, the container password, the container runtime directory, and the server. |
 
 The disposable containers, networks, and engagement were removed afterwards.
 

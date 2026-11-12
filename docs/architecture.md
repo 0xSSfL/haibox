@@ -253,6 +253,28 @@ These are enforced by code and covered by the unit suite:
 11. The default network profile is `isolated`; a reused network without both
     gateway modes set to `isolated`, or with a host gateway, is refused.
 
+### 6.1 Prototype-only GUI session invariants
+
+The optional Xpra GUI is a disposable prototype documented in
+[ADR-0011](adr/0011-gui-session-in-existing-runner.md). It is not part of the
+product: there is no `haibox gui` command, no `ContainerSpec` field, and no
+catalog image. While the prototype exists, these invariants hold:
+
+12. A GUI session is refused unless the engagement uses the `isolated` network
+    profile with an empty target scope, the engagement metadata matches the
+    canonical scope file, and the container is attached to exactly the
+    engagement network.
+13. A GUI session is never replaced before the previous server is confirmed
+    terminated. The `xpra stop` exit code is advisory only; termination is
+    confirmed by a bounded inspection of the container. An ambiguous result is
+    a refusal, and the credential, the runtime, and the server are left
+    untouched.
+14. An Xpra server on the same display that does not belong to the engagement
+    is reported and never signalled.
+15. The GUI transport is a Unix-domain socket in an owner-controlled 0700
+    directory, and the session credential is a mode-0600 file that is rotated
+    on every prepare and removed on stop.
+
 ## 7. Known gaps
 
 - **Network enforcement is incomplete.** The default `isolated` profile

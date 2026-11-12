@@ -42,11 +42,15 @@ class FakeDocker:
         self.stop_returncode = 0
         self.stop_timeout = False
         self.stop_stops_server = True
-        self.server_alive = False
-        self.foreign_alive = False
+        self.server_pids: set[int] = set()
+        self.foreign_pids: set[int] = set()
         self.listener_open = False
+        self.listener_stays_open = False
+        self.probe_error = ""
         self.scan_fails = False
+        self.scan_uncertain = False
         self.scan_output: bytes | None = None
+        self._next_pid = 4100
 
     def __call__(
         self,
@@ -66,7 +70,8 @@ class FakeDocker:
         if "xpra start" in joined:
             if self.fail_start:
                 return subprocess.CompletedProcess(args, 1, b"", b"start failed")
-            self.server_alive = True
+            self._next_pid += 1
+            self.server_pids.add(self._next_pid)
             self.listener_open = True
             return subprocess.CompletedProcess(args, 0, b"", b"")
         if "xpra" in args and "stop" in args:
@@ -74,16 +79,21 @@ class FakeDocker:
                 # The stop reached the server but the command did not answer
                 # in time; the real helper converts that into a SessionError.
                 if self.stop_stops_server:
-                    self.server_alive = False
+                    self.server_pids.clear()
                     self.listener_open = False
                 raise session.SessionError("docker exec timed out after 30s")
             if self.stop_returncode == 0 and self.stop_stops_server:
-                self.server_alive = False
+                # A stop request that reaches the display stops every server
+                # on it, including a foreign one.
+                self.server_pids.clear()
+                self.foreign_pids.clear()
                 self.listener_open = False
             detail = b"" if self.stop_returncode == 0 else b"stop failed"
             return subprocess.CompletedProcess(args, self.stop_returncode, b"", detail)
         if "socat" in joined:
-            if self.listener_open:
+            if self.probe_error:
+                return subprocess.CompletedProcess(args, 127, b"", self.probe_error.encode())
+            if self.listener_open or self.listener_stays_open:
                 return subprocess.CompletedProcess(args, 0, b"", b"")
             return subprocess.CompletedProcess(
                 args,
@@ -99,8 +109,9 @@ class FakeDocker:
         if self.scan_output is not None:
             return subprocess.CompletedProcess(args, 0, self.scan_output, b"")
         payload = {
-            "ours": [4242] if self.server_alive else [],
-            "foreign": [4343] if self.foreign_alive else [],
+            "ours": sorted(self.server_pids),
+            "foreign": sorted(self.foreign_pids),
+            "uncertain": self.scan_uncertain,
         }
         return subprocess.CompletedProcess(args, 0, json.dumps(payload).encode(), b"")
 
@@ -287,23 +298,25 @@ def test_prepare_stops_existing_server_before_resetting_runtime(
 def test_stop_server_confirms_termination_when_the_server_stops(
     fake_session: FakeDocker, fast_lifecycle: None
 ) -> None:
-    fake_session.server_alive = True
+    fake_session.server_pids = {4242}
     fake_session.listener_open = True
 
     session._stop_server("haibox", "haibox-gui-a")
 
     commands = [" ".join(call["args"]) for call in fake_session.calls]
     stop_index = next(index for index, command in enumerate(commands) if "xpra stop" in command)
-    scan_index = next(index for index, command in enumerate(commands) if "python3" in command)
-    assert stop_index < scan_index
-    assert fake_session.server_alive is False
+    scans = [index for index, command in enumerate(commands) if "python3" in command]
+    # The ownership check runs before the stop, and the termination proof runs
+    # after it.
+    assert scans[0] < stop_index < scans[-1]
+    assert fake_session.server_pids == set()
     assert fake_session.listener_open is False
 
 
 def test_stop_server_fails_when_the_stop_command_fails_and_the_server_survives(
     fake_session: FakeDocker, fast_lifecycle: None
 ) -> None:
-    fake_session.server_alive = True
+    fake_session.server_pids = {4242}
     fake_session.listener_open = True
     fake_session.stop_returncode = 1
     fake_session.stop_stops_server = False
@@ -315,20 +328,20 @@ def test_stop_server_fails_when_the_stop_command_fails_and_the_server_survives(
 def test_stop_server_accepts_a_stop_command_timeout_when_termination_is_confirmed(
     fake_session: FakeDocker, fast_lifecycle: None
 ) -> None:
-    fake_session.server_alive = True
+    fake_session.server_pids = {4242}
     fake_session.listener_open = True
     fake_session.stop_timeout = True
 
     session._stop_server("haibox", "haibox-gui-a")
 
-    assert fake_session.server_alive is False
+    assert fake_session.server_pids == set()
     assert fake_session.listener_open is False
 
 
 def test_stop_server_fails_when_a_stop_command_timeout_leaves_the_server_running(
     fake_session: FakeDocker, fast_lifecycle: None
 ) -> None:
-    fake_session.server_alive = True
+    fake_session.server_pids = {4242}
     fake_session.listener_open = True
     fake_session.stop_timeout = True
     fake_session.stop_stops_server = False
@@ -340,7 +353,7 @@ def test_stop_server_fails_when_a_stop_command_timeout_leaves_the_server_running
 def test_stop_server_fails_when_the_server_survives_a_successful_stop(
     fake_session: FakeDocker, fast_lifecycle: None
 ) -> None:
-    fake_session.server_alive = True
+    fake_session.server_pids = {4242}
     fake_session.listener_open = True
     fake_session.stop_returncode = 0
     fake_session.stop_stops_server = False
@@ -352,7 +365,7 @@ def test_stop_server_fails_when_the_server_survives_a_successful_stop(
 def test_stop_server_is_safe_when_no_server_exists(
     fake_session: FakeDocker, fast_lifecycle: None
 ) -> None:
-    fake_session.server_alive = False
+    fake_session.server_pids = set()
     fake_session.listener_open = False
 
     session._stop_server("haibox", "haibox-gui-a")
@@ -383,14 +396,139 @@ def test_stop_server_fails_closed_when_the_container_cannot_be_inspected(
 def test_stop_server_refuses_to_stop_a_foreign_xpra_server(
     fake_session: FakeDocker, fast_lifecycle: None
 ) -> None:
-    fake_session.foreign_alive = True
+    fake_session.foreign_pids = {4343}
 
     with pytest.raises(session.SessionError, match="another Xpra server owns display"):
         session._stop_server("haibox", "haibox-gui-a")
 
     commands = [" ".join(call["args"]) for call in fake_session.calls]
-    assert not any("kill" in command for command in commands)
-    assert fake_session.foreign_alive is True
+    # The ownership check runs first, so no stop request is ever sent and the
+    # foreign server is never signalled.
+    assert not any("xpra stop" in command for command in commands)
+    assert fake_session.foreign_pids == {4343}
+
+
+def test_stop_server_refuses_to_stop_the_display_that_holds_a_foreign_server(
+    fake_session: FakeDocker, fast_lifecycle: None
+) -> None:
+    fake_session.server_pids = {4242}
+    fake_session.foreign_pids = {4343}
+
+    with pytest.raises(session.SessionError, match="another Xpra server owns display"):
+        session._stop_server("haibox", "haibox-gui-a")
+
+    commands = [" ".join(call["args"]) for call in fake_session.calls]
+    # A stop request for the display could reach the foreign server too, so
+    # neither server is signalled.
+    assert not any("xpra stop" in command for command in commands)
+    assert fake_session.foreign_pids == {4343}
+    assert fake_session.server_pids == {4242}
+
+
+def test_stop_server_fails_closed_when_the_container_state_is_uncertain(
+    fake_session: FakeDocker, fast_lifecycle: None
+) -> None:
+    fake_session.scan_uncertain = True
+
+    with pytest.raises(session.SessionError, match="cannot confirm"):
+        session._stop_server("haibox", "haibox-gui-a")
+
+    commands = [" ".join(call["args"]) for call in fake_session.calls]
+    assert not any("xpra stop" in command for command in commands)
+
+
+def test_stop_server_fails_closed_when_the_loopback_port_cannot_be_probed(
+    fake_session: FakeDocker, fast_lifecycle: None
+) -> None:
+    fake_session.probe_error = "socat: command not found"
+
+    with pytest.raises(session.SessionError, match="cannot confirm"):
+        session._stop_server("haibox", "haibox-gui-a")
+
+
+def test_stop_server_fails_closed_when_the_loopback_port_stays_open(
+    fake_session: FakeDocker, fast_lifecycle: None
+) -> None:
+    fake_session.listener_open = True
+    fake_session.listener_stays_open = True
+
+    with pytest.raises(session.SessionError, match="still accepts connections"):
+        session._stop_server("haibox", "haibox-gui-a")
+
+
+def _write_cmdline(root: Path, pid: int, argv: list[str]) -> None:
+    directory = root / str(pid)
+    directory.mkdir(parents=True)
+    (directory / "cmdline").write_bytes(b"\0".join(part.encode() for part in argv) + b"\0")
+
+
+def test_server_scan_script_classifies_our_and_foreign_servers(tmp_path: Path) -> None:
+    root = tmp_path / "proc"
+    root.mkdir()
+    _write_cmdline(
+        root,
+        100,
+        [
+            "/usr/bin/python3",
+            "-sP",
+            "/usr/sbin/xpra",
+            "start",
+            session.DISPLAY,
+            f"--socket-dirs={session.RUNTIME_DIR}",
+        ],
+    )
+    _write_cmdline(
+        root,
+        200,
+        [
+            "/usr/bin/python3",
+            "-sP",
+            "/usr/sbin/xpra",
+            "start",
+            session.DISPLAY,
+            "--socket-dirs=/tmp/somebody-else",
+        ],
+    )
+    _write_cmdline(root, 300, ["/usr/bin/xterm", "-e", "sh"])
+    _write_cmdline(root, 400, ["/usr/sbin/xpra", "stop", session.DISPLAY])
+
+    result = subprocess.run(
+        [sys.executable, "-c", session._server_scan_script(), str(root)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    payload = json.loads(result.stdout.strip().splitlines()[-1])
+
+    assert payload["ours"] == [100]
+    assert payload["foreign"] == [200]
+    assert payload["uncertain"] is False
+
+
+def test_server_scan_script_reports_uncertain_processes(tmp_path: Path) -> None:
+    root = tmp_path / "proc"
+    root.mkdir()
+    # A cmdline that cannot be read must not be treated as "no server".
+    (root / "500" / "cmdline").mkdir(parents=True)
+
+    result = subprocess.run(
+        [sys.executable, "-c", session._server_scan_script(), str(root)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    payload = json.loads(result.stdout.strip().splitlines()[-1])
+
+    assert payload["ours"] == []
+    assert payload["foreign"] == []
+    assert payload["uncertain"] is True
+
+
+def test_server_scan_script_uses_the_current_display_and_runtime() -> None:
+    script = session._server_scan_script()
+
+    assert json.dumps(session.DISPLAY) in script
+    assert json.dumps(session.RUNTIME_DIR) in script
 
 
 def test_prepare_refuses_to_reset_or_rotate_when_the_old_server_survives(
@@ -398,7 +536,7 @@ def test_prepare_refuses_to_reset_or_rotate_when_the_old_server_survives(
 ) -> None:
     password_path = session_state / "gui-a.password"
     security.write_password_file(password_path, "stale-password")
-    fake_session.server_alive = True
+    fake_session.server_pids = {4242}
     fake_session.listener_open = True
     fake_session.stop_stops_server = False
 
@@ -441,7 +579,7 @@ def test_second_prepare_rotates_credentials_and_keeps_one_server(
 
     assert second_password != first_password
     assert len(_container_passwords(fake_session)) == 2
-    assert fake_session.server_alive is True
+    assert len(fake_session.server_pids) == 1
 
     commands = [" ".join(call["args"]) for call in fake_session.calls]
     starts = [index for index, command in enumerate(commands) if "xpra start" in command]
