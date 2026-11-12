@@ -254,8 +254,12 @@ The prototype does not close F-02 through F-09:
   code;
 - no automated negative test for each disabled forwarding feature;
 - external targets remain forbidden until M2 scope enforcement is complete;
-- the prototype rotates and removes credentials, but audited revocation and
-  log-redaction are not implemented in a product lifecycle;
+- the prototype rotates and removes credentials, but container-side removal
+  requires the engagement container to be running; if it is already stopped,
+  the host copy is removed and the container runtime directory remains until
+  the next prepare resets it;
+- audited revocation and log-redaction are not implemented in a product
+  lifecycle;
 - the hardened relay/session scripts have unit regressions but have not been
   re-run against a real Docker endpoint;
 - server packaging for the Debian-based catalog and host-client distribution
