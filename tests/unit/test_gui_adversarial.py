@@ -127,6 +127,8 @@ class _HostileRuntime(FakeRuntime):
         self.server_pids: set[int] = set()
         self.stopper_pids: set[int] = set()
         self.listener_open = False
+        self.engagement = engagement
+        self.argv: dict[str, list[str]] = {}
 
     def exec_detached(
         self, name: str, command: list[str], timeout: int | None = None
@@ -134,6 +136,9 @@ class _HostileRuntime(FakeRuntime):
         super().exec_detached(name, command, timeout)
         self.server_pids = {9000}
         self.listener_open = True
+        self.argv = {
+            "9000": list(GuiSessionSpec.from_engagement(self.engagement).server_args())
+        }
 
     def exec_capture(
         self, name: str, command: list[str], timeout: int | None = None
@@ -151,7 +156,7 @@ class _HostileRuntime(FakeRuntime):
                         "ours": sorted(self.server_pids),
                         "foreign": [],
                         "stoppers": sorted(self.stopper_pids),
-                        "argv": {},
+                        "argv": self.argv,
                         "uncertain": False,
                     }
                 ),
@@ -588,7 +593,14 @@ def test_no_stop_request_is_sent_when_no_server_is_running(paths: Paths) -> None
     manager.prepare(ENGAGEMENT_ID)
 
     commands = [" ".join(str(part) for part in call[1]) for call in runtime.calls]
-    assert not any("xpra stop" in command for command in commands)
+    # The process scan mentions "xpra stop" in a comment; only a real stop
+    # command matters here.
+    stops = [
+        command
+        for command in commands
+        if "xpra stop" in command and "python3" not in command
+    ]
+    assert not stops
 
 
 def test_the_relay_refuses_a_container_it_does_not_own(paths: Paths) -> None:

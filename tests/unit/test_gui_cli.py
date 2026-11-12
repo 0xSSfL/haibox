@@ -55,8 +55,11 @@ def test_gui_commands_refuse_while_the_image_is_experimental(
 ) -> None:
     _write_gui_manifest(gui_catalog, "experimental")
     paths.ensure()
+    EngagementManager(paths).create(
+        "demo", name="Demo", scope=Scope(), uid=1000, gid=1000
+    )
 
-    result = invoke(cli_runner, paths, "gui", "status", "demo")
+    result = invoke(cli_runner, paths, "gui", "start", "demo")
 
     assert result.exit_code == 1
     assert isinstance(result.exception, GuiNotEnabled)
@@ -216,3 +219,52 @@ def test_gui_status_refuses_an_engagement_with_external_targets(
     assert result.exit_code == 1
     assert isinstance(result.exception, GuiPreflightError)
     assert "external targets" in str(result.exception)
+
+
+def test_gui_status_and_stop_are_not_gated(
+    cli_runner: CliRunner, paths, cli, gui_catalog: Path
+) -> None:
+    """An operator must always be able to inspect and revoke a session."""
+
+    _write_gui_manifest(gui_catalog, "experimental")
+    paths.ensure()
+    engagement = EngagementManager(paths).create(
+        "demo",
+        name="Demo",
+        scope=Scope(),
+        image="haibox/gui:0.1.0",
+        cpus=2.0,
+        memory="2g",
+        pids_limit=512,
+        uid=1000,
+        gid=1000,
+    )
+    cli.containers[engagement.runtime.container_name] = ContainerInfo(
+        id="fake-0001",
+        name=engagement.runtime.container_name,
+        image=engagement.image,
+        state="running",
+        status="Up",
+        labels={
+            "haibox.managed": "true",
+            "haibox.engagement": engagement.id,
+        },
+        network_mode=engagement.runtime.network_name,
+        networks=(engagement.runtime.network_name,),
+    )
+    cli.exec_results = [
+        ExecResult(
+            exit_code=0,
+            stdout=json.dumps(
+                {"ours": [], "foreign": [], "stoppers": [], "argv": {}, "uncertain": False}
+            ),
+            stderr="",
+        )
+    ]
+
+    result = invoke(cli_runner, paths, "--json", "gui", "status", "demo")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["engagement"] == "demo"
+    assert payload["running"] is False

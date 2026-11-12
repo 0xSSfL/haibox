@@ -60,6 +60,25 @@ foreign = []
 stoppers = []
 argv_by_pid = {}
 uncertain = False
+
+
+def owns_runtime(pid):
+    # Whether the process points at this engagement's runtime directory.
+    # ``xpra stop`` carries the runtime directory in its environment, not in
+    # its command line, so both are checked.
+
+    try:
+        with open(os.path.join(root, str(pid), "environ"), "rb") as handle:
+            raw = handle.read()
+    except OSError:
+        return False
+    for entry in raw.split(b"\0"):
+        if not entry.startswith(b"XDG_RUNTIME_DIR="):
+            continue
+        value = entry.split(b"=", 1)[1].decode("utf-8", "replace")
+        if runtime_pattern.search(value):
+            return True
+    return False
 me = os.getpid()
 for entry in os.listdir(root):
     if not entry.isdigit():
@@ -83,9 +102,12 @@ for entry in os.listdir(root):
             break
         if argv[index + 1] == "stop" and argv[index + 2] == display:
             # A stop request that is still waiting for a server to appear.
-            # It is only ours when it references this engagement's runtime
-            # directory; a stop request for another session is never touched.
-            if any(runtime_pattern.search(element) for element in argv):
+            # It is only ours when it points at this engagement's runtime
+            # directory, in its command line or in its environment; a stop
+            # request for another session is never touched.
+            if any(runtime_pattern.search(element) for element in argv) or owns_runtime(
+                pid
+            ):
                 stoppers.append(pid)
             else:
                 foreign.append(pid)
@@ -236,6 +258,21 @@ class GuiSessionManager:
             argv={str(key): [str(part) for part in value] for key, value in argv.items()},
         )
 
+    def _assert_denied_flags(self, spec: GuiSessionSpec) -> None:
+        """Refuse a server that does not carry every deny-by-default flag."""
+
+        state = self._server_state(spec)
+        if not state.ours:
+            raise GuiError("the Xpra server is not running")
+        for pid in state.ours:
+            argv = state.argv.get(str(pid))
+            if not isinstance(argv, list):
+                raise GuiError(f"cannot read the Xpra server command line for pid {pid}")
+            joined = " ".join(str(part) for part in argv)
+            for flag in DENIED_SERVER_FLAGS:
+                if flag not in joined:
+                    raise GuiError(f"the Xpra server is missing the deny flag {flag}")
+
     def _listener_open(self, spec: GuiSessionSpec) -> bool:
         result = self.runtime.exec_capture(
             spec.container,
@@ -350,6 +387,7 @@ class GuiSessionManager:
             self._start_server(spec)
             started = True
             self._wait_for_listener(spec)
+            self._assert_denied_flags(spec)
         except BaseException:
             if started:
                 with contextlib.suppress(GuiError):

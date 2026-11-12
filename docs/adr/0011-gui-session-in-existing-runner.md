@@ -24,10 +24,13 @@ does not approve a production feature, add GUI fields to `ContainerSpec`, or
 publish a catalog image.
 
 The 2026-11-12 implementation adds the runtime in `src/haibox/gui/` and the
-`haibox gui start|attach|stop|status` commands. The commands are gated: while
-the GUI image is experimental they refuse with a message that names the
-reason, and no flag or environment variable can bypass the gate. The gate is
-the catalog status of the GUI image, which is an owner decision.
+`haibox gui start|attach|stop|status` commands. Starting and attaching a
+session are gated: while the GUI image is experimental they refuse with a
+message that names the reason. There is no user-facing flag that enables the
+GUI. The gate is the status of the GUI image in the catalog the CLI resolves,
+so whoever controls that catalog controls the gate — the same trust level as
+changing the image definition itself. `gui status` and `gui stop` are never
+gated, so an operator can always inspect and revoke an existing session.
 
 ## Decision
 

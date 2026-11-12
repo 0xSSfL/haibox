@@ -320,10 +320,15 @@ error: the GUI is not enabled: the GUI image haibox/gui:0.1.0 is experimental,
 not active; promote it in images/gui/manifest.yaml after the image gate is accepted
 ```
 
-There is no flag or environment variable that enables it. The gate is the
-catalog status of the GUI image, which is an owner decision. A GUI session
-also requires the engagement to use the `isolated` network profile, to have an
-empty external target scope, and to use the approved GUI image.
+There is no user-facing flag that enables it. The gate is the status of the
+GUI image in the catalog the CLI resolves, which is an owner decision; an
+operator who can change that catalog can also change the gate, which is the
+same trust level as changing the image definition itself.
+
+`gui status` and `gui stop` are never gated, so an existing session can always
+be inspected and revoked. A GUI session also requires the engagement to use
+the `isolated` network profile, to have an empty external target scope, and to
+use the approved GUI image.
 
 ---
 

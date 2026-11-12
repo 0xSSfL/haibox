@@ -45,9 +45,16 @@ error: the GUI is not enabled: the GUI image haibox/gui:0.1.0 is experimental,
 not active; promote it in images/gui/manifest.yaml after the image gate is accepted
 ```
 
-The gate is the catalog status of the GUI image. There is no experimental flag
-and no environment variable that can bypass it; only the owner can promote the
-image. `haibox doctor` reports the GUI state without failing, because the
+The gate is the status of the GUI image in the catalog the CLI resolves. There
+is no user-facing flag that enables the GUI; whoever controls that catalog
+controls the gate, which is the same trust level as changing the image
+definition itself. Until the image branch is merged, the message is the
+"image definition is unavailable" variant, because the GUI image definition
+does not exist in this branch yet.
+
+`haibox gui start` and `haibox gui attach` are gated. `haibox gui status` and
+`haibox gui stop` are not, so an operator can always inspect and revoke a
+session. `haibox doctor` reports the GUI state without failing, because the
 capability is optional.
 
 ## Real-Docker lifecycle run
@@ -104,7 +111,7 @@ requirements. All of it runs without Docker.
 | Hostile protocol stream | `test_relay_survives_a_hostile_byte_stream` | 1 MiB of random bytes from the client does not crash the relay; the relay stays usable |
 | Truncated and stalled streams | `test_relay_stops_a_stalled_peer_after_the_idle_timeout` | A peer that never sends is dropped after the idle bound |
 | Concurrent sessions | `test_relay_refuses_a_second_client` | The second client is closed instead of being served |
-| Foreign peer | `test_relay_rejects_a_peer_with_a_different_user` | A peer that is not the relay's user is refused |
+| Foreign peer | `test_relay_rejects_a_peer_with_a_different_user` | The peer credentials are read with `SO_PEERCRED` and a peer that is not the relay's user is refused; the test exercises the refusal path rather than a full `SO_PEERCRED` handshake |
 | Authentication and secret handling | `test_the_credential_never_appears_in_the_server_argv`, `test_the_credential_is_not_written_to_the_audit_log` | The credential is a file name in argv, never a value, and never reaches the audit log |
 | Credential rotation and revocation | `test_a_rotated_credential_replaces_the_previous_value`, `test_a_revoked_credential_is_removed` | Rotation replaces the value in place; revocation removes the file and the read then fails |
 | Cross-engagement isolation | `test_a_container_of_another_engagement_is_refused`, `test_an_extra_network_is_refused`, `test_a_non_isolated_engagement_is_refused`, `test_external_targets_are_refused` | Every deviation from the engagement's own isolated runner is refused |
@@ -162,3 +169,6 @@ the owner:
 | The GUI image base is a pre-release snapshot | Medium | Open — the image must be rebuilt on the Fedora 46 stable release |
 | The audit events cover the session lifecycle, not a per-attach event | Low | Open — an attach event is recorded by the CLI relay command, but the attach itself is not audited per client |
 | No adversarial test drives a real Xpra protocol stream | Low | Open — the unit tests use a fake container; a real-Docker stream fuzzing pass is still missing |
+| The GUI image definition is not in this branch | Low | Open — the image lives in the image branch; the gate reports the definition as unavailable until that branch is merged |
+| The session budget is a ceiling, not a cap on the container | Low | Accepted — an engagement that asks for more than the budget is refused, and the container keeps the limits the engagement froze |
+| A leftover `xpra stop` request is recognised through its environment | Low | Open — the ownership test reads the runtime directory from the command line and from `XDG_RUNTIME_DIR`; a stop request that carries neither cannot be attributed and is treated as foreign |

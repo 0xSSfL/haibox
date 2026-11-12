@@ -267,8 +267,9 @@ def test_preflight_rejects_a_stopped_container(paths: Paths) -> None:
 class GuiFakeRuntime(FakeRuntime):
     """A fake runtime that answers container commands by their shape."""
 
-    def __init__(self) -> None:
+    def __init__(self, engagement: Engagement | None = None) -> None:
         super().__init__()
+        self.engagement = engagement
         self.server_pids: set[int] = set()
         self.foreign_pids: set[int] = set()
         self.stopper_pids: set[int] = set()
@@ -296,9 +297,7 @@ class GuiFakeRuntime(FakeRuntime):
         super().exec_detached(name, command, timeout)
         self.server_pids = {9000}
         self.listener_open = True
-        self.argv = {
-            "9000": ["xpra", "start", ":100", "--socket-dirs=/tmp/xpra-runtime"]
-        }
+        self.argv = {"9000": list(GuiSessionSpec.from_engagement(self.engagement).server_args())}
 
     def exec_capture(
         self, name: str, command: list[str], timeout: int | None = None
@@ -356,7 +355,7 @@ def test_prepare_rotates_the_credential_and_writes_both_copies(
     paths: Paths,
 ) -> None:
     engagement = _engagement()
-    runtime = GuiFakeRuntime()
+    runtime = GuiFakeRuntime(engagement)
     _write_scope(paths, engagement.scope)
     runtime.containers[CONTAINER] = ContainerInfo(
         id="fake-0001",
@@ -386,7 +385,7 @@ def test_prepare_rotates_the_credential_and_writes_both_copies(
 
 def test_prepare_refuses_when_a_foreign_server_owns_the_display(paths: Paths) -> None:
     engagement = _engagement()
-    runtime = GuiFakeRuntime()
+    runtime = GuiFakeRuntime(engagement)
     _write_scope(paths, engagement.scope)
     runtime.foreign_pids = {999}
     runtime.containers[CONTAINER] = ContainerInfo(
@@ -414,7 +413,7 @@ def test_prepare_refuses_when_a_foreign_server_owns_the_display(paths: Paths) ->
 
 def test_prepare_refuses_when_the_previous_server_survives(paths: Paths) -> None:
     engagement = _engagement()
-    runtime = GuiFakeRuntime()
+    runtime = GuiFakeRuntime(engagement)
     _write_scope(paths, engagement.scope)
     runtime.server_pids = {4242}
     runtime.containers[CONTAINER] = ContainerInfo(
@@ -443,7 +442,7 @@ def test_prepare_refuses_when_the_previous_server_survives(paths: Paths) -> None
 
 def test_verify_requires_the_denied_flags(paths: Paths) -> None:
     engagement = _engagement()
-    runtime = GuiFakeRuntime()
+    runtime = GuiFakeRuntime(engagement)
     _write_scope(paths, engagement.scope)
     runtime.server_pids = {7}
     runtime.argv = {"7": ["xpra", "start", ":100", "--clipboard=no"]}
@@ -468,7 +467,7 @@ def test_verify_requires_the_denied_flags(paths: Paths) -> None:
 
 def test_verify_accepts_a_server_with_every_denied_flag(paths: Paths) -> None:
     engagement = _engagement()
-    runtime = GuiFakeRuntime()
+    runtime = GuiFakeRuntime(engagement)
     _write_scope(paths, engagement.scope)
     spec = GuiSessionSpec.from_engagement(engagement)
     runtime.server_pids = {7}

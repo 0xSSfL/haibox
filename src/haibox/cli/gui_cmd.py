@@ -2,8 +2,10 @@
 
 The commands are prepared but stay disabled until the GUI image is accepted:
 the gate is the catalog status of the GUI image, which is an owner decision
-recorded in ``images/gui/manifest.yaml``.  There is no experimental flag and
-no environment variable that can bypass it.
+recorded in ``images/gui/manifest.yaml``.  There is no user-facing flag that
+enables the GUI.  The gate belongs to whoever controls the catalog the CLI
+resolves, which is the same trust level as changing the image definition
+itself.
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ from haibox.cli import ui
 from haibox.cli.context import AppContext, get_context
 from haibox.engagement import EngagementManager
 from haibox.errors import HAIBOXError
-from haibox.gui import GuiRelay, GuiSessionManager, GuiSessionSpec
+from haibox.gui import APPROVED_GUI_IMAGE, GuiRelay, GuiSessionManager, GuiSessionSpec
 from haibox.gui.errors import GuiError
 from haibox.images.catalog import ImageCatalog
 
@@ -55,12 +57,23 @@ def gui_enabled() -> tuple[bool, str]:
             f"the GUI image {manifest.image_ref} is {manifest.status}, not active; "
             "promote it in images/gui/manifest.yaml after the image gate is accepted"
         )
+    if manifest.image_ref != APPROVED_GUI_IMAGE:
+        return False, (
+            f"the GUI image definition points at {manifest.image_ref}, not the "
+            f"approved {APPROVED_GUI_IMAGE}"
+        )
     return True, ""
 
 
-def _require_enabled() -> None:
+def _require_enabled(obj: AppContext, engagement: str | None = None) -> None:
     enabled, reason = gui_enabled()
     if not enabled:
+        if obj is not None:
+            obj.audit(
+                "gui.session_refused",
+                engagement=engagement,
+                data={"reason": f"the GUI is not enabled: {reason}"},
+            )
         raise GuiNotEnabled(f"the GUI is not enabled: {reason}")
 
 
@@ -106,7 +119,7 @@ def gui_start(
     """Start a GUI session for an engagement."""
 
     obj = get_context(ctx)
-    _require_enabled()
+    _require_enabled(obj, engagement_id)
     engagement = _engagement_id(obj, engagement_id)
     manager = _manager(obj)
     try:
@@ -131,7 +144,7 @@ def gui_attach(
     """Serve the GUI session on a local Unix-domain socket."""
 
     obj = get_context(ctx)
-    _require_enabled()
+    _require_enabled(obj, engagement_id)
     engagement = _engagement_id(obj, engagement_id)
     manager = _manager(obj)
     status = manager.status(engagement)
@@ -181,7 +194,8 @@ def gui_stop(
     """Stop the GUI session of an engagement."""
 
     obj = get_context(ctx)
-    _require_enabled()
+    # Stopping is never gated: an operator must always be able to revoke a
+    # session, even after the GUI image was demoted.
     engagement = _engagement_id(obj, engagement_id)
     manager = _manager(obj)
     try:
@@ -201,7 +215,7 @@ def gui_status(
     """Show the state of the GUI session of an engagement."""
 
     obj = get_context(ctx)
-    _require_enabled()
+    # Status is never gated: it only reads state.
     engagement = _engagement_id(obj, engagement_id)
     manager = _manager(obj)
     payload = manager.status(engagement).to_dict()

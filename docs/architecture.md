@@ -281,7 +281,9 @@ While the runtime exists, these invariants hold:
     builds every container command from the fixed session specification, so no
     caller can pass a container command or a runtime argument.
 17. The GUI session has explicit CPU, memory, process, connection, and timeout
-    limits, and every copy in the relay is bounded.
+    limits. The CPU, memory, and process limits are a ceiling: an engagement
+    whose container asks for more is refused. Every copy in the relay is
+    bounded.
 
 ## 7. Known gaps
 
