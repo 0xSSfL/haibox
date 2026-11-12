@@ -47,6 +47,7 @@ Docker context.
 | `ad-security` | Experimental | `haibox/core:0.1.0` | Authorized Active Directory assessment | Impacket, smbclient, ldapsearch, kinit, nmap |
 | `osint` | Experimental | `haibox/web-security:0.1.0` | Public-source, DNS, and metadata collection | dnsrecon, exiftool, whois, subfinder, httpx, nuclei |
 | `full` | Experimental | `haibox/web-security:0.1.0` | Combined toolkit | Union of the Web, Network, AD, and OSINT sets |
+| `gui` | Experimental | Fedora 46 (pre-release) | Optional Xpra seamless server for a GUI session | xpra, xterm, Xvfb, socat |
 
 “Active” means the image definition and build path are part of the validated
 milestone. It does not mean the image has no vulnerabilities; the scan gate is
@@ -62,10 +63,14 @@ recorded separately in [`image-validation.md`](image-validation.md).
 | `ad-security` | Passed 2026-11-09 | Passed: Impacket, SMB, LDAP, Kerberos, and nmap as uid/gid 65534 | 98 (94 H, 4 C) | `sha256:8cef90b5d751e0c7eab0bc2aea9be1e7395608420ceb541a6cc37075effaf3d9` |
 | `osint` | Passed 2026-11-09 | Passed: dnsrecon, exiftool, whois, subfinder, httpx, nuclei as uid/gid 65534 | 165 (162 H, 3 C) | `sha256:baf5381595542a24427bf8dc83ae1eb98ccd9a1ed692cc788ecc3ba6c000d3c5` |
 | `full` | Passed 2026-11-09 | Passed: 31 tools as uid/gid 65534 | 181 (174 H, 7 C) | `sha256:bfac7833bd56127b2583e2d7b0a311af07b3974851ab7e693f009259be69dd2b` |
+| `gui` | Passed 2026-11-12 | Passed: xpra, xterm, Xvfb, and socat as uid/gid 65534 | 0 (0 H, 0 C) — Grype fallback, Trivy cannot scan Fedora | `sha256:d9bc6ff25b3be4eab1ee5a9d2c4ba8b51dfb7cfcd3f037fd22685677cb02a41b` |
 
-All six images build, verify, and have recorded Trivy scan baselines. Web
+All seven images build, verify, and have a recorded scan baseline. Web
 Security, OSINT, and Full include scoped `trivyignore.yaml` files for the 25
-upstream test fixtures in `nuclei-templates`. Detailed finding matrices and
+upstream test fixtures in `nuclei-templates`. The `gui` image is a Fedora
+image, so Trivy reports `Unsupported os` and the Grype fallback covers the OS;
+it is the only image with no HIGH/CRITICAL findings, and it is still
+experimental while its base is a pre-release snapshot. Detailed finding matrices and
 reachability analyses are maintained in
 [`docs/vulnerability-risk-register.md`](vulnerability-risk-register.md) and
 [`docs/image-validation.md`](image-validation.md).

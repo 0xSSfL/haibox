@@ -80,7 +80,7 @@ def test_homepage_toolkit_cards_match_manifests() -> None:
     cards = CARD_PATTERN.findall(homepage)
 
     assert {image_name for image_name, _ in cards} == set(manifests)
-    assert len(cards) == 6
+    assert len(cards) == len(manifests)
 
     expected_badges = {
         "active": ("badge-active", "Active"),

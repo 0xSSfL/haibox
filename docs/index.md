@@ -162,6 +162,26 @@ hide:
     <div class="toolkit-code">haibox image build web-security</div>
   </article>
 
+  <!-- GUI -->
+  <article class="toolkit-card" data-image="gui">
+    <div class="toolkit-card-header">
+      <div class="toolkit-icon-title">
+        <div class="toolkit-icon"><svg class="hb-icon" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="assets/icons.svg#toolkit-gui"></use></svg></div>
+        <h3>gui</h3>
+      </div>
+      <span class="toolkit-badge badge-exp">Experimental</span>
+    </div>
+    <div class="toolkit-desc">Optional Xpra seamless server for a GUI session inside an engagement runner. The session commands are not enabled yet.</div>
+    <div class="toolkit-tools-label">Included Tools</div>
+    <div class="toolkit-tags">
+      <span class="toolkit-tag">xpra</span>
+      <span class="toolkit-tag">xterm</span>
+      <span class="toolkit-tag">xorg-x11-server-Xvfb</span>
+      <span class="toolkit-tag">socat</span>
+    </div>
+    <div class="toolkit-code">haibox image build gui</div>
+  </article>
+
   <!-- Network Security -->
   <article class="toolkit-card" data-image="network-security">
     <div class="toolkit-card-header">

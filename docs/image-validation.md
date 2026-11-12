@@ -108,6 +108,26 @@ regressions additionally reject an OS-only Trivy report, an empty or malformed
 package inventory, a Grype report without target/database evidence, a malformed
 match, and exit codes that contradict the parsed findings.
 
+### GUI image scan (2026-11-12)
+
+The GUI image is a Fedora image, so Trivy reports `Unsupported os` and the
+Grype fallback covers the OS.
+
+| Image | Trivy | Fallback | Result |
+|---|---|---|---|
+| `haibox/gui:0.1.0` (Fedora 46) | `Unsupported os` | Grype `fedora 46` | 0 HIGH/CRITICAL; gate green |
+
+The previous Fedora 44 GUI fixture reported 66 HIGH/CRITICAL findings (50 in
+Pillow, 16 in PCRE2). Every one of them is fixed upstream, and the rebuilt
+image carries the fixed packages (`python3-pillow` 13.0.0, `pcre2` 10.49), so
+no ignore file, no `--ignore-unfixed`, and no exception was needed. The
+remediation and the rejected alternatives are recorded in
+[`superpowers/poc/2026-11-12-gui-image-security.md`](superpowers/poc/2026-11-12-gui-image-security.md).
+
+The image is still **experimental**: Fedora 46 is a pre-release snapshot at the
+time of the scan, so the image must be rebuilt on the stable release before it
+can be called production-qualifiable.
+
 The Fedora and Arch runs confirm that the fallback covers the OS and that the
 gate fails on real findings instead of passing on an empty Trivy report. Trivy
 still scans language packages when it cannot scan OS packages, so the fallback
