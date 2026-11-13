@@ -83,6 +83,13 @@ uv run haibox doctor
   the Dockerfile together.
 - Six variants exist: `core`, `network-security`, `web-security`,
   `ad-security`, `osint`, `full`; local tags are `haibox/<name>:0.1.0`.
+- Image versions are independent of the application version. The six catalog
+  images stayed at `0.1.0` across the `0.1.1` and `0.2.0` application
+  releases, so a remediation does not have to move the image version. Bump an
+  image version only in a change that rebuilds the whole catalog, and update
+  every reference to that tag in the same change: the `BASE_IMAGE` build args
+  of the dependent images, the digest table in `docs/image-catalog.md`, and
+  the scan baselines.
 - `uv run haibox image build <name>` builds `depends_on` first. Add
   `--reuse-dependencies` to avoid rebuilding an already-scanned base; rebuilding
   changes the digest and invalidates scan evidence.
@@ -155,7 +162,7 @@ tag. The release workflow checks that the tag matches the project version, runs
 the check gate, builds the wheel and sdist, and publishes the GitHub release.
 
 ```bash
-git tag -a v0.2.0 <merge-commit> -m "HAIBOX 0.2.0"
-git push origin v0.2.0
+git tag -a vX.Y.Z <merge-commit> -m "HAIBOX X.Y.Z"
+git push origin vX.Y.Z
 ```
 
