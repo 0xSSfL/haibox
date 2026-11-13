@@ -136,3 +136,26 @@ After a feature or fix is complete and `make check` passes:
    - links to the relevant ADR or issue.
 5. Merge/push to `main` only after the checks pass and the description is
    complete. Never merge unverified or failing work.
+
+## Releasing
+
+The `Protect main` ruleset rejects a direct push to `main`, so every change to
+`main` — including a version bump — has to arrive through a pull request.
+Bump the version inside the pull request that ships the change, as `v0.1.1`
+did, instead of opening a separate release pull request.
+
+```bash
+# in the feature branch
+# edit pyproject.toml and src/haibox/version.py to the new version, then
+uv lock                                    # refresh the project entry
+```
+
+After the pull request is merged, tag the merge commit on `main` and push the
+tag. The release workflow checks that the tag matches the project version, runs
+the check gate, builds the wheel and sdist, and publishes the GitHub release.
+
+```bash
+git tag -a v0.2.0 <merge-commit> -m "HAIBOX 0.2.0"
+git push origin v0.2.0
+```
+
