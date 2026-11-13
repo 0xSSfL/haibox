@@ -13,6 +13,7 @@ procedure as a result.
 | Debian snapshot | `20261108T000000Z` via `snapshot-cloudflare.debian.org` |
 | Go builder | `golang:1.26-bookworm@sha256:23ce71337b726608afb1bc00986e630a05034a87a87ea1fc2cd1ae5cf33387eb` |
 | Nuclei templates | commit `79fb682760ab3d5b0e22afbb44709353cbebf023` |
+| Go module requirements | `images/web-security/gomod/<tool>.go.mod` and `.go.sum`, committed |
 
 The Cloudflare snapshot mirror is used because `snapshot.debian.org` returned
 `504 Gateway Timeout` for package indices during the first attempts. It serves
@@ -23,6 +24,34 @@ Installing the full set in one BuildKit layer made `apt-get` grow past 6 GB
 anonymous RSS and triggered a host OOM; the same set installs well under a
 2 GB cap when split or run in a plain container. The Go stage sets
 `GOMAXPROCS=2` and `-p=2` to limit parallel compile memory.
+
+### Go tool build inputs
+
+The Go tools are built from source, not from the upstream release archives. The
+upstream releases pin vulnerable transitive module versions in their own
+`go.mod`, so `images/web-security/gomod/` holds the patched requirement set for
+each tool and is the pinned build input:
+
+| Tool | Release | Module | Bumped requirements |
+|---|---|---|---|
+| ffuf | `v2.3.0` | `github.com/ffuf/ffuf/v2` | `golang.org/x/net v0.62.0`, `brotli v1.2.7` |
+| gobuster | `v3.8.2` | `github.com/OJ/gobuster/v3` | `golang.org/x/net v0.62.0`, `x/crypto v0.59.0`, `x/sys v0.50.0` |
+| nuclei | `v3.11.1` | `github.com/projectdiscovery/nuclei/v3` | `x/net v0.62.0`, `x/crypto v0.59.0`, `x/text v0.44.0`, `x/mod v0.42.0`, `x/sys v0.50.0`, `compress v1.20.2`, `brotli v1.2.7`, `goldmark v1.7.17`, `kin-openapi v0.149.0`, `go-git/v5 v5.19.2`, `go-jose/v4 v4.1.6`, `grpc v1.84.0` |
+| httpx | `v1.12.0` | `github.com/projectdiscovery/httpx` | `x/net v0.62.0`, `x/crypto v0.59.0`, `x/text v0.44.0`, `x/sys v0.50.0`, `compress v1.20.2`, `brotli v1.2.7`, `goldmark v1.7.17` |
+| subfinder | `v2.17.0` | `github.com/projectdiscovery/subfinder/v2` | `x/net v0.62.0`, `x/crypto v0.59.0`, `x/text v0.44.0`, `x/sys v0.50.0`, `compress v1.20.2`, `brotli v1.2.7`, `goldmark v1.7.17` |
+| katana | `v1.8.0` | `github.com/projectdiscovery/katana` | `x/net v0.62.0`, `x/crypto v0.59.0`, `x/text v0.44.0`, `x/sys v0.50.0`, `compress v1.20.2`, `brotli v1.2.7`, `goldmark v1.7.17`, `pgx/v5 v5.9.0` |
+| dalfox | `v2.13.0` | `github.com/hahwul/dalfox/v2` | `x/net v0.62.0`, `x/crypto v0.59.0`, `x/text v0.44.0`, `x/mod v0.42.0`, `x/sys v0.50.0`, `echo/v4 v4.16.1` |
+
+The source comes from the Go module proxy, which is immutable and verified
+against the Go checksum database. The build copies the committed requirement
+files over the upstream ones and then asserts the module metadata of the
+resulting binary: every fixed version must be present, and the vulnerable
+version must be absent. The build fails rather than shipping a binary that
+does not satisfy the assertion.
+
+`go mod tidy` must never run in the image build. The tools do not import the
+bumped modules directly, so tidy drops the upgrades and silently restores the
+vulnerable versions.
 
 ## Build and verify
 
@@ -164,6 +193,72 @@ path passes, a non-fixture path fails, and a changed vulnerability set fails.
 
 ## Results
 
+### 2026-11-13 Web Security Go-tool rebuild
+
+The upstream Go releases pin the vulnerable transitive module versions in their
+own `go.mod`, so a tool version bump cannot remove the findings. This rebuild
+compiles every Go tool from its pinned upstream release with the affected
+modules replaced by their fixed versions, using the committed requirement sets
+described in [Go tool build inputs](#go-tool-build-inputs).
+
+| Check | Result |
+|---|---|
+| Build | Passed; `haibox/web-security:0.1.0` |
+| Image ID / manifest-list digest | `sha256:c9c80a11a699417519d532c450c1d9f14536c3834b84d3de872689458e191d0a` |
+| Build assertions | Passed; 89 module-metadata assertions plus a sweep that rejects 30 previously vulnerable module versions |
+| `image verify` | Passed; all 15 pinned tools run successfully in a restricted non-root container |
+| In-image smoke test | Passed; 7 version checks and 6 functional checks against a local target |
+| Trivy HIGH/CRITICAL, baseline image | 227 findings: 3 CRITICAL, 224 HIGH |
+| Trivy HIGH/CRITICAL, rebuilt image | 147 findings: 0 CRITICAL, 147 HIGH |
+| Grype HIGH/CRITICAL, baseline image | 271 (39 CRITICAL, 232 HIGH) of 675 matches |
+| Grype HIGH/CRITICAL, rebuilt image | 218 (28 CRITICAL, 190 HIGH) of 590 matches |
+| Go binaries with a Trivy finding | 7 of 7 before, 0 of 7 after |
+| Grype advisories removed | 46 distinct advisories removed, 0 added |
+| `haibox image scan` | Exit 1; 147 HIGH/CRITICAL remain, so the gate stays red |
+
+The comparison is a like-for-like one: the previous image was preserved as
+`haibox/web-security:0.1.0-baseline-p0` (`2543840d4ade`) and both images were
+scanned back to back with the same scanner database, so the difference is the
+image and not the advisory feed.
+
+Trivy findings per target:
+
+| Target | Baseline | Rebuilt |
+|---|---:|---:|
+| Debian 13.7 packages | 145 | 145 |
+| `usr/local/bin/dalfox` | 26 | 0 |
+| `usr/local/bin/gobuster` | 18 | 0 |
+| `usr/local/bin/nuclei` | 15 | 0 |
+| `usr/local/bin/ffuf` | 10 | 0 |
+| `usr/local/bin/katana` | 5 | 0 |
+| `usr/local/bin/httpx` | 3 | 0 |
+| `usr/local/bin/subfinder` | 3 | 0 |
+| `dirsearch` `native/Cargo.lock` | 2 | 2 |
+| **Total** | **227** | **147** |
+
+The Debian layer is unchanged, so the 145 remaining OS findings are the same
+dependency debt as before; every finding that the rebuild could remove is
+gone. The three CRITICAL findings were removed, not suppressed:
+`CVE-2026-118264` (`github.com/labstack/echo/v4` in `dalfox`),
+`CVE-2026-33815` and `CVE-2026-33816` (`github.com/jackc/pgx/v5` in `katana`),
+plus `CVE-2026-84304` and `CVE-2026-84445` (`google.golang.org/grpc` in
+`nuclei`) and 75 further HIGH findings disappear from the raw report because
+the rebuilt binaries no longer contain the affected module versions.
+
+Grype confirms the same direction from its own database: 675 → 590 matches,
+271 → 218 HIGH/CRITICAL, and the OS layer is identical in both runs (579
+matches). The two scanners do not agree on the severity of every finding, so
+the counts are not comparable to each other; only each scanner's own
+before/after pair is. Three advisories remain in the rebuilt binaries and have
+no fix available: `github.com/labstack/echo/v4` (the fix ships only on the
+`v5` module path), the deprecated `golang.org/x/crypto/openpgp` package, and
+the Go standard library `go1.26.10` (fixed in `go1.26.11`). They are analysed
+in [`docs/vulnerability-risk-register.md`](vulnerability-risk-register.md).
+
+`osint` and `full` are built `FROM haibox/web-security:0.1.0`, so they inherit
+the rebuilt tools on their next build. Their recorded scan baselines predate
+this rebuild and stay stale for the Go modules until then.
+
 ### 2026-11-08 rebuild (Debian 13 trixie, snapshot 20261108)
 
 | Check | Result |
@@ -238,6 +333,11 @@ this as the remaining M1 blocker.
 | Language module findings | 0 | 0 | 82 (79 HIGH, 3 CRIT) | 0 | 82 (79 HIGH, 3 CRIT) | 82 (79 HIGH, 3 CRIT) |
 | Scoped secret suppressions | 0 | 0 | 25 removed (0 remaining) | 0 | 25 removed (0 remaining) | 25 removed (0 remaining) |
 | Gate status | Open (Debian debt) | Open (liblmdb0) | Open (Go modules) | Open (liblmdb0, libxml2) | Open (Go modules) | Open (combined) |
+
+The Web Security column of this 2026-11-09 matrix is superseded by the
+[2026-11-13 Go-tool rebuild](#2026-11-13-web-security-go-tool-rebuild):
+147 HIGH, 0 CRITICAL, and no language-module finding left. The other five
+columns are unaffected by that rebuild.
 
 All six images use the same Debian snapshot (`20261108T000000Z`) and base digest as Web Security.
 Core installs only shell, file, and network triage packages. Network Security

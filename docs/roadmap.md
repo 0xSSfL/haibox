@@ -69,9 +69,12 @@ remediation (newer Debian packages and newer pinned Go tool releases).
 The CRITICAL findings across the catalog are:
 
 - `CVE-2026-118264` in `github.com/labstack/echo/v4` inside `dalfox`
-  (`v4.15.2`, fixed `4.16.1` in `web-security`, `osint`, `full`);
+  (`v4.15.2`, fixed `4.16.1` in `web-security`, `osint`, `full`) — **resolved
+  in `web-security`** by the 2026-11-13 Go-tool rebuild; `osint` and `full`
+  still carry it until they are rebuilt on the new base;
 - `CVE-2026-33815` and `CVE-2026-33816` in `github.com/jackc/pgx/v5` inside
-  `katana` (`v5.7.2`, fixed `5.9.0` in `web-security`, `osint`, `full`);
+  `katana` (`v5.7.2`, fixed `5.9.0` in `web-security`, `osint`, `full`) — same
+  status as the entry above;
 - `CVE-2019-16224`, `CVE-2019-16225`, and `CVE-2019-16227` in Debian `liblmdb0`
   (pulled into `network-security` by `knot-dnsutils` and into `ad-security` by
   `samba-common-bin`, inherited by `full`);
@@ -85,6 +88,11 @@ and in Go modules embedded by the latest upstream releases (`golang.org/x/net`,
 `klauspost/compress`, `pgx`, `grpc`, `go-git`, `go-jose`). They are analysed in
 [`vulnerability-risk-register.md`](vulnerability-risk-register.md) and are not
 suppressed.
+
+The 2026-11-13 Go-tool rebuild removed every Go-module finding from
+`web-security`: its 147 remaining HIGH findings are Debian OS packages only,
+and the Debian security tracker lists each of them as open for trixie with no
+fixed version.
 
 ## M2 — Scope enforcement and trusted storage (current)
 
