@@ -59,7 +59,7 @@ recorded separately in [`image-validation.md`](image-validation.md).
 |---|---|---|---|---|
 | `core` | Passed 2026-11-09 | Passed: all 18 tools as uid/gid 65534 | 82 (82 H, 0 C) | `sha256:962ce7034da59a7d92c6cb9eca20e2348d73c92c560bc002de094cd77d68c5fc` |
 | `network-security` | Passed 2026-11-09 | Passed: all 12 tools as uid/gid 65534 | 87 (84 H, 3 C) | `sha256:75a634b43746eab3709915113f0be65a5e0149b0c686a5f628eeba0d64effcd3` |
-| `web-security` | Passed 2026-11-13 (Go-tool rebuild) | Passed: all 15 tools as uid/gid 65534 | 147 (147 H, 0 C) | `sha256:c9c80a11a699417519d532c450c1d9f14536c3834b84d3de872689458e191d0a` |
+| `web-security` | Passed 2026-11-13 (Go-tool rebuild) | Passed: all 15 tools as uid/gid 65534 | 147 (147 H, 0 C) | `sha256:8a4127f3965aceed8ad13e122532a4d47ef491229689da4fcec5897105b28def` |
 | `ad-security` | Passed 2026-11-09 | Passed: Impacket, SMB, LDAP, Kerberos, and nmap as uid/gid 65534 | 98 (94 H, 4 C) | `sha256:8cef90b5d751e0c7eab0bc2aea9be1e7395608420ceb541a6cc37075effaf3d9` |
 | `osint` | Passed 2026-11-09 | Passed: dnsrecon, exiftool, whois, subfinder, httpx, nuclei as uid/gid 65534 | 165 (162 H, 3 C) | `sha256:baf5381595542a24427bf8dc83ae1eb98ccd9a1ed692cc788ecc3ba6c000d3c5` |
 | `full` | Passed 2026-11-09 | Passed: 31 tools as uid/gid 65534 | 181 (174 H, 7 C) | `sha256:bfac7833bd56127b2583e2d7b0a311af07b3974851ab7e693f009259be69dd2b` |

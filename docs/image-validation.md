@@ -53,6 +53,30 @@ does not satisfy the assertion.
 bumped modules directly, so tidy drops the upgrades and silently restores the
 vulnerable versions.
 
+### Module metadata checks
+
+The checks live in `images/web-security/check-modules.sh`, driven by two
+committed lists, so they can be exercised without a Docker build:
+
+- `module-requirements.txt` — `<tool> <module> <version>` triples that the
+  named tool must embed;
+- `forbidden-modules.txt` — `<module> <version>` pairs that no binary in the
+  image may embed.
+
+Each list is read line by line and split on whitespace, so a module path
+stays paired with its own version. `tests/unit/test_image_module_assertions.py`
+covers the passing case and the failing ones: a deliberately injected
+forbidden module version, a forbidden entry that is not the first one, a
+missing required version, and missing metadata. The Dockerfile runs the same
+script, so the tested behaviour is the shipped behaviour.
+
+### Dependency file immutability
+
+The build resolves modules with `-mod=readonly`, which refuses to change the
+requirement files. It also compares `go.mod` and `go.sum` against the
+committed copies after the build and fails if either changed. A pinned
+requirement therefore cannot be silently rewritten by the build.
+
 ## Build and verify
 
 ```bash
@@ -63,6 +87,16 @@ uv run haibox image verify web-security
 `image verify` runs each manifest `verify` command in a restricted ephemeral
 container: read-only root filesystem, `--cap-drop ALL`, no network, non-root
 user. A missing tool or a version mismatch fails the command.
+
+The Go tools get an additional functional check, `scripts/smoke-web-security.sh`,
+which runs inside the image and exercises every rebuilt tool against a local
+HTTP server: 7 version checks, 6 functional checks, and a read-back of the
+embedded module metadata from the shipped binaries. It needs no external
+network, so it works against the isolated runner profile.
+
+```bash
+scripts/smoke-web-security.sh web-security
+```
 
 ## Network isolation probe
 
@@ -204,10 +238,11 @@ described in [Go tool build inputs](#go-tool-build-inputs).
 | Check | Result |
 |---|---|
 | Build | Passed; `haibox/web-security:0.1.0` |
-| Image ID / manifest-list digest | `sha256:c9c80a11a699417519d532c450c1d9f14536c3834b84d3de872689458e191d0a` |
-| Build assertions | Passed; 89 module-metadata assertions plus a sweep that rejects 30 previously vulnerable module versions |
+| Image ID / manifest-list digest | `sha256:8a4127f3965aceed8ad13e122532a4d47ef491229689da4fcec5897105b28def` |
+| Build assertions | Passed; 40 required module versions and 29 forbidden versions, checked by `check-modules.sh` |
+| Dependency file immutability | Passed; the build resolves modules with `-mod=readonly` and compares `go.mod`/`go.sum` against the committed copies after each tool, so no pinned requirement changed |
 | `image verify` | Passed; all 15 pinned tools run successfully in a restricted non-root container |
-| In-image smoke test | Passed; 7 version checks and 6 functional checks against a local target |
+| In-image smoke test | Passed; 7 version checks, 6 functional checks against a local target, and 40 module-version read-backs from the shipped binaries |
 | Trivy HIGH/CRITICAL, baseline image | 227 findings: 3 CRITICAL, 224 HIGH |
 | Trivy HIGH/CRITICAL, rebuilt image | 147 findings: 0 CRITICAL, 147 HIGH |
 | Grype HIGH/CRITICAL, baseline image | 271 (39 CRITICAL, 232 HIGH) of 675 matches |
