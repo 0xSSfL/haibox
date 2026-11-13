@@ -37,6 +37,12 @@ ENV CGO_ENABLED=0 \
 # again because the tools do not import the affected modules directly.
 COPY gomod/ /build/gomod/
 
+# The module metadata checks live in a script so they can be exercised by the
+# unit tests without a Docker build.  module-requirements.txt lists the
+# versions each tool must embed, forbidden-modules.txt lists the versions no
+# binary may embed.
+COPY check-modules.sh module-requirements.txt forbidden-modules.txt /build/
+
 # build_tool <name> <module> <version> <package-path>
 #
 # The module proxy serves the upstream source for the pinned release, and the
@@ -63,31 +69,17 @@ RUN set -eux; \
         cp "/build/gomod/${name}.go.mod" "/tmp/src/${name}/go.mod"; \
         cp "/build/gomod/${name}.go.sum" "/tmp/src/${name}/go.sum"; \
         cd "/tmp/src/${name}"; \
-        go build -mod=mod -trimpath -buildvcs=false -p=2 -o "/go/bin/${name}" "${path}"; \
+        cp go.mod /tmp/go.mod.pinned; \
+        cp go.sum /tmp/go.sum.pinned; \
+        go build -mod=readonly -trimpath -buildvcs=false -p=2 -o "/go/bin/${name}" "${path}"; \
+        cmp -s go.mod /tmp/go.mod.pinned || { \
+            echo "FATAL: ${name} build changed go.mod"; exit 1; \
+        }; \
+        cmp -s go.sum /tmp/go.sum.pinned || { \
+            echo "FATAL: ${name} build changed go.sum"; exit 1; \
+        }; \
         go version -m "/go/bin/${name}" > "/tmp/${name}.modinfo"; \
         grep -E "^[[:space:]]*dep[[:space:]]" "/tmp/${name}.modinfo"; \
-    }; \
-    assert_fixed() { \
-        name="$1"; module="$2"; version="$3"; \
-        if ! awk -v m="$module" -v v="$version" \
-                '$1=="dep" && $2==m && ($3==v || $3=="v" v) {f=1} END{exit !f}' \
-                "/tmp/${name}.modinfo"; then \
-            echo "FATAL: ${name} does not embed ${module} ${version}"; \
-            grep -E "^[[:space:]]*dep[[:space:]]+${module}[[:space:]]" \
-                "/tmp/${name}.modinfo" || true; \
-            exit 1; \
-        fi; \
-        echo "OK: ${name} embeds ${module} ${version}"; \
-    }; \
-    assert_absent() { \
-        name="$1"; module="$2"; version="$3"; \
-        if awk -v m="$module" -v v="$version" \
-                '$1=="dep" && $2==m && ($3==v || $3=="v" v) {f=1} END{exit !f}' \
-                "/tmp/${name}.modinfo"; then \
-            echo "FATAL: ${name} still embeds vulnerable ${module} ${version}"; \
-            exit 1; \
-        fi; \
-        echo "OK: ${name} does not embed ${module} ${version}"; \
     }; \
     build_tool ffuf      github.com/ffuf/ffuf/v2                "${FFUF_VERSION}"      . ; \
     build_tool gobuster  github.com/OJ/gobuster/v3               "${GOBUSTER_VERSION}"  . ; \
@@ -97,91 +89,7 @@ RUN set -eux; \
     build_tool katana    github.com/projectdiscovery/katana       "${KATANA_VERSION}"    ./cmd/katana ; \
     build_tool dalfox    github.com/hahwul/dalfox/v2              "${DALFOX_VERSION}"    . ; \
     \
-    assert_fixed dalfox github.com/labstack/echo/v4 4.16.1 ; \
-    assert_absent dalfox github.com/labstack/echo/v4 4.15.2 ; \
-    assert_fixed katana github.com/jackc/pgx/v5 5.9.0 ; \
-    assert_absent katana github.com/jackc/pgx/v5 5.7.2 ; \
-    assert_fixed nuclei github.com/getkin/kin-openapi 0.149.0 ; \
-    assert_fixed nuclei github.com/go-git/go-git/v5 5.19.2 ; \
-    assert_fixed nuclei github.com/go-jose/go-jose/v4 4.1.6 ; \
-    assert_fixed nuclei google.golang.org/grpc 1.84.0 ; \
-    assert_absent nuclei google.golang.org/grpc 1.82.1 ; \
-    assert_fixed nuclei golang.org/x/net 0.62.0 ; \
-    assert_fixed nuclei golang.org/x/crypto 0.59.0 ; \
-    assert_fixed nuclei golang.org/x/text 0.44.0 ; \
-    assert_fixed nuclei golang.org/x/mod 0.42.0 ; \
-    assert_fixed nuclei golang.org/x/sys 0.50.0 ; \
-    assert_fixed nuclei github.com/klauspost/compress 1.20.2 ; \
-    assert_fixed nuclei github.com/andybalholm/brotli 1.2.7 ; \
-    assert_fixed nuclei github.com/yuin/goldmark 1.7.17 ; \
-    assert_fixed httpx golang.org/x/net 0.62.0 ; \
-    assert_fixed httpx golang.org/x/crypto 0.59.0 ; \
-    assert_fixed httpx golang.org/x/text 0.44.0 ; \
-    assert_fixed httpx golang.org/x/sys 0.50.0 ; \
-    assert_fixed httpx github.com/klauspost/compress 1.20.2 ; \
-    assert_fixed httpx github.com/andybalholm/brotli 1.2.7 ; \
-    assert_fixed httpx github.com/yuin/goldmark 1.7.17 ; \
-    assert_fixed subfinder golang.org/x/net 0.62.0 ; \
-    assert_fixed subfinder golang.org/x/crypto 0.59.0 ; \
-    assert_fixed subfinder golang.org/x/text 0.44.0 ; \
-    assert_fixed subfinder golang.org/x/sys 0.50.0 ; \
-    assert_fixed subfinder github.com/klauspost/compress 1.20.2 ; \
-    assert_fixed subfinder github.com/andybalholm/brotli 1.2.7 ; \
-    assert_fixed subfinder github.com/yuin/goldmark 1.7.17 ; \
-    assert_fixed katana golang.org/x/net 0.62.0 ; \
-    assert_fixed katana golang.org/x/crypto 0.59.0 ; \
-    assert_fixed katana golang.org/x/text 0.44.0 ; \
-    assert_fixed katana golang.org/x/sys 0.50.0 ; \
-    assert_fixed katana github.com/klauspost/compress 1.20.2 ; \
-    assert_fixed katana github.com/andybalholm/brotli 1.2.7 ; \
-    assert_fixed katana github.com/yuin/goldmark 1.7.17 ; \
-    assert_fixed gobuster golang.org/x/net 0.62.0 ; \
-    assert_fixed gobuster golang.org/x/crypto 0.59.0 ; \
-    assert_fixed gobuster golang.org/x/sys 0.50.0 ; \
-    assert_fixed ffuf golang.org/x/net 0.62.0 ; \
-    assert_fixed ffuf github.com/andybalholm/brotli 1.2.7 ; \
-    \
-    forbidden="github.com/labstack/echo/v4 4.15.2 \
-github.com/jackc/pgx/v5 5.7.2 \
-google.golang.org/grpc 1.82.1 \
-github.com/klauspost/compress 1.18.2 \
-github.com/klauspost/compress 1.18.5 \
-github.com/klauspost/compress 1.18.7 \
-github.com/andybalholm/brotli 1.0.5 \
-github.com/andybalholm/brotli 1.2.0 \
-github.com/yuin/goldmark 1.7.4 \
-github.com/yuin/goldmark 1.7.13 \
-software.sslmate.com/src/go-pkcs12 0.6.0 \
-golang.org/x/crypto 0.41.0 \
-golang.org/x/crypto 0.50.0 \
-golang.org/x/crypto 0.53.0 \
-golang.org/x/crypto 0.58.0 \
-golang.org/x/net 0.7.0 \
-golang.org/x/net 0.43.0 \
-golang.org/x/net 0.53.0 \
-golang.org/x/net 0.56.0 \
-golang.org/x/net 0.58.0 \
-golang.org/x/net 0.59.0 \
-golang.org/x/text 0.28.0 \
-golang.org/x/text 0.36.0 \
-golang.org/x/text 0.39.0 \
-golang.org/x/text 0.42.0 \
-golang.org/x/mod 0.34.0 \
-golang.org/x/mod 0.37.0 \
-golang.org/x/sys 0.35.0 \
-golang.org/x/sys 0.49.0" ; \
-    for pair in ${forbidden}; do \
-        module="${pair% *}"; version="${pair#* }"; \
-        for info in /tmp/*.modinfo; do \
-            if awk -v m="$module" -v v="$version" \
-                    '$1=="dep" && $2==m && ($3==v || $3=="v" v) {f=1} END{exit !f}' \
-                    "$info"; then \
-                echo "FATAL: ${info} still embeds vulnerable ${module} ${version}"; \
-                exit 1; \
-            fi; \
-        done; \
-    done; \
-    echo "OK: no binary embeds a previously vulnerable module version"; \
+    sh /build/check-modules.sh /tmp /build/module-requirements.txt /build/forbidden-modules.txt; \
     \
     ffuf -V >/dev/null; \
     gobuster --version >/dev/null; \
