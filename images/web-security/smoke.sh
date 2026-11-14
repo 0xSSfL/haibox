@@ -1,10 +1,17 @@
-#!/bin/bash
-# Functional smoke tests for the rebuilt web-security tools.
+#!/usr/bin/env bash
+# Functional smoke test for the Go tools of the web-security image.
 #
-# The script runs inside the candidate image and exercises every rebuilt Go
-# tool against a local HTTP server, so it needs no external network.
-set -u
+# Runs inside the image and exercises every rebuilt Go tool against a local
+# HTTP server, so it needs no external network. It then reads the embedded
+# module metadata back out of the shipped binaries and runs the same
+# check-modules.sh the image build uses, so the shipped image is verified
+# against the committed requirement set instead of a copy of its rules.
+#
+# The image is mounted read-only, so everything is written under the
+# temporary directory.
+set -uo pipefail
 
+CONTEXT="${SMOKE_CONTEXT:-/smoke}"
 WORKDIR=$(mktemp -d)
 cd "$WORKDIR"
 
@@ -65,6 +72,7 @@ if curl -fsS http://127.0.0.1:18080/ >/dev/null; then
     echo "target is up"
 else
     echo "TARGET FAILED"
+    kill "$SERVER_PID" 2>/dev/null
     exit 1
 fi
 
@@ -110,7 +118,9 @@ run dalfox-version dalfox version
 echo "=== functional checks against the local target ==="
 run ffuf-scan ffuf -u http://127.0.0.1:18080/FUZZ -w "$WORKDIR/words.txt" -mc all -fs 404 -s
 run gobuster-dir gobuster dir -u http://127.0.0.1:18080 -w "$WORKDIR/words.txt" -q --no-error
-run nuclei-scan nuclei -u http://127.0.0.1:18080 -t http/exposures/configs/git-config.yaml -silent
+# The template path is absolute so nuclei uses the pinned local template set
+# instead of resolving it against a remote index.
+run nuclei-scan nuclei -u http://127.0.0.1:18080 -t /opt/nuclei-templates/http/exposures/configs/git-config.yaml -silent
 run httpx-scan httpx -u http://127.0.0.1:18080 -silent -title
 run katana-scan katana -u http://127.0.0.1:18080 -silent -d 1
 run dalfox-scan dalfox url "http://127.0.0.1:18080/?q=1" --silence
@@ -124,26 +134,17 @@ check "katana crawled"    "127.0.0.1"       "$WORKDIR/katana-scan.out"
 check "dalfox reflected"  "q="              "$WORKDIR/dalfox-scan.out"
 
 echo "=== module metadata of the shipped binaries ==="
+# The same checker the image build runs, against the metadata read back out of
+# the shipped binaries.
+metadata="$WORKDIR/metadata"
+mkdir -p "$metadata"
 for tool in ffuf gobuster nuclei httpx subfinder katana dalfox; do
-    path=$(command -v "$tool")
-    printf '%-12s %s\n' "$tool" "$path"
+    grep -a -o -P 'dep\t[^\t]+\tv[0-9][0-9.a-z+-]*' "/usr/local/bin/${tool}" \
+        > "$metadata/$tool.modinfo" 2>/dev/null || true
 done
-
-# Read the module metadata back out of the shipped binaries.  The build asserts
-# it, but this reads it independently from the image that is actually shipped.
-if [ -f /smoke/module-requirements.txt ]; then
-    echo "=== embedded module versions ==="
-    while read -r tool module version; do
-        [ -n "${tool:-}" ] || continue
-        case "$tool" in '#'*) continue ;; esac
-        printf '%-12s %-40s %-10s ' "$tool" "$module" "$version"
-        if grep -a -q -P "\t${module}\tv?${version}\t" "/usr/local/bin/${tool}"; then
-            echo "OK"
-        else
-            echo "MISSING"
-            failures=$((failures + 1))
-        fi
-    done < /smoke/module-requirements.txt
+if ! sh "${CONTEXT}/check-modules.sh" "$metadata" \
+    "${CONTEXT}/module-requirements.txt" "${CONTEXT}/forbidden-modules.txt"; then
+    failures=$((failures + 1))
 fi
 
 kill "$SERVER_PID" 2>/dev/null
