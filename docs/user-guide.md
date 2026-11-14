@@ -340,18 +340,31 @@ An image definition is a directory under `images/`:
 images/web-security/
   Dockerfile
   manifest.yaml
-  trivyignore.yaml   (optional, scoped suppressions only)
+  trivyignore.yaml       (optional, scoped suppressions only)
+  gomod/                 (pinned Go requirement sets)
+  module-requirements.txt (versions each tool must embed)
+  forbidden-modules.txt   (versions no binary may embed)
+  check-modules.sh        (the metadata check the build runs)
+  smoke.sh                (the in-image functional smoke test)
 ```
 
 The manifest is the source of truth for the base digest, Debian snapshot, build
 args, pinned tool versions, and verification commands. The builder labels the
 image with a digest of the tool list, so drift is detectable.
 
+The Web Security image builds its Go tools from the source of the pinned
+upstream releases with the requirement sets in `gomod/`. The build reads the
+module metadata of every binary and checks it against
+`module-requirements.txt` and `forbidden-modules.txt`, so an image that
+regresses to a vulnerable module version fails the build.
+`scripts/smoke-web-security.sh` runs the same check against the shipped image.
+
 ```bash
 uv run haibox image list
 uv run haibox image build web-security
 uv run haibox image verify web-security
 uv run haibox image scan web-security
+scripts/smoke-web-security.sh
 ```
 
 `image verify` runs every `verify` command from the manifest in an ephemeral

@@ -15,6 +15,11 @@ images/
     Dockerfile
     manifest.yaml
     trivyignore.yaml
+    gomod/
+    module-requirements.txt
+    forbidden-modules.txt
+    check-modules.sh
+    smoke.sh
   ad-security/
     Dockerfile
     manifest.yaml
@@ -42,6 +47,14 @@ builder loads each local manifest and builds it first, so a Dockerfile can use
 built once; cycles are rejected before Docker runs. `--reuse-dependencies`
 skips a dependency whose exact version tag already exists locally.
 
+The Web Security image builds its Go tools from the source of the pinned
+upstream releases, with the requirement sets in `web-security/gomod/`. The
+build resolves them read-only and checks the module metadata of every binary
+against `module-requirements.txt` and `forbidden-modules.txt`, so an image
+that regresses to a vulnerable module version fails the build instead of
+shipping. `scripts/smoke-web-security.sh` runs the same check, plus a
+functional smoke test, against the built image.
+
 | Image | Base | Role |
 |---|---|---|
 | `core` | Debian 13 snapshot | Shared minimal shell, file, and network triage |
@@ -51,10 +64,11 @@ skips a dependency whose exact version tag already exists locally.
 | `osint` | `haibox/web-security:0.1.0` | DNS, metadata, public-source collection |
 | `full` | `haibox/web-security:0.1.0` | Combined package set |
 
-> **Build status.** All six images are built and verified. Only Web Security
-> has a recorded Trivy scan; the other images still need scan records.
-> Verification and scanning results are recorded in the top-level `README.md`,
-> `docs/image-catalog.md`, and `docs/image-validation.md`.
+> **Build status.** All six images are built and verified, and each has a
+> recorded scan baseline. The scan gate is open on dependency findings, so no
+> image is security-approved yet. Verification and scanning results are
+> recorded in the top-level `README.md`, `docs/image-catalog.md`, and
+> `docs/image-validation.md`.
 
 Build, verify, and scan from the repository root:
 
