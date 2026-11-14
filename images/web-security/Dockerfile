@@ -58,7 +58,7 @@ RUN set -eux; \
         mkdir -p /tmp/download && cd /tmp/download; \
         if [ ! -f go.mod ]; then go mod init haibox.local/download; fi; \
         src="$(go mod download -json "${module}@${version}" \
-              | sed -n 's/^[[:space:]]*"Dir":[[:space:]]*"\(.*\)",$/\1/p')"; \
+              | sed -n 's/.*"Dir":[[:space:]]*"\([^"]*\)".*/\1/p')"; \
         if [ -z "${src}" ] || [ ! -d "${src}" ]; then \
             echo "FATAL: ${module}@${version} was not downloaded"; exit 1; \
         fi; \
@@ -72,12 +72,8 @@ RUN set -eux; \
         cp go.mod /tmp/go.mod.pinned; \
         cp go.sum /tmp/go.sum.pinned; \
         go build -mod=readonly -trimpath -buildvcs=false -p=2 -o "/go/bin/${name}" "${path}"; \
-        cmp -s go.mod /tmp/go.mod.pinned || { \
-            echo "FATAL: ${name} build changed go.mod"; exit 1; \
-        }; \
-        cmp -s go.sum /tmp/go.sum.pinned || { \
-            echo "FATAL: ${name} build changed go.sum"; exit 1; \
-        }; \
+        sh /build/check-modules.sh compare go.mod /tmp/go.mod.pinned; \
+        sh /build/check-modules.sh compare go.sum /tmp/go.sum.pinned; \
         go version -m "/go/bin/${name}" > "/tmp/${name}.modinfo"; \
         grep -E "^[[:space:]]*dep[[:space:]]" "/tmp/${name}.modinfo"; \
     }; \
@@ -91,13 +87,15 @@ RUN set -eux; \
     \
     sh /build/check-modules.sh /tmp /build/module-requirements.txt /build/forbidden-modules.txt; \
     \
+    # A build-time sanity check that every binary runs.  The manifest keeps the
+    # authoritative verify commands for `haibox image verify`.
     ffuf -V >/dev/null; \
     gobuster --version >/dev/null; \
     nuclei -version >/dev/null; \
     httpx -version >/dev/null; \
     subfinder -version >/dev/null; \
     katana -version >/dev/null; \
-    dalfox version >/dev/null
+    dalfox --help >/dev/null
 
 FROM ${DEBIAN_IMAGE}
 

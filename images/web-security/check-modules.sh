@@ -2,6 +2,7 @@
 # Verify the module metadata of the Go tools built into the web-security image.
 #
 # usage: check-modules.sh <modinfo-dir> <requirements-file> <forbidden-file>
+#        check-modules.sh compare <file> <pinned-copy>
 #
 # The requirements file lists "<tool> <module> <version>" triples: the named
 # tool must embed that module version.  The forbidden file lists
@@ -9,10 +10,44 @@
 #
 # Each entry is read line by line and split on whitespace, so a module path
 # and its version stay paired even when the list has many entries.
+#
+# The compare mode fails when a file differs from the copy that was pinned
+# before the build, so a build that rewrites a committed requirement file is
+# rejected instead of shipping it.
 set -eu
 
-if [ "$#" -ne 3 ]; then
+usage() {
     echo "usage: check-modules.sh <modinfo-dir> <requirements-file> <forbidden-file>" >&2
+    echo "       check-modules.sh compare <file> <pinned-copy>" >&2
+}
+
+if [ "$#" -lt 1 ]; then
+    usage
+    exit 2
+fi
+
+if [ "$1" = "compare" ]; then
+    if [ "$#" -ne 3 ]; then
+        usage
+        exit 2
+    fi
+    file="$2"
+    pinned="$3"
+    if [ ! -f "$file" ] || [ ! -f "$pinned" ]; then
+        echo "FATAL: cannot compare ${file} with ${pinned}" >&2
+        exit 1
+    fi
+    if cmp -s "$file" "$pinned"; then
+        echo "OK: $(basename "$file") is unchanged"
+        exit 0
+    fi
+    echo "FATAL: $(basename "$file") was modified during the build" >&2
+    diff -u "$pinned" "$file" 2>/dev/null | head -20 >&2 || true
+    exit 1
+fi
+
+if [ "$#" -ne 3 ]; then
+    usage
     exit 2
 fi
 

@@ -2,8 +2,9 @@
 #
 # Format: <module> <version>
 #
-# These are the versions the upstream tool releases pinned, each with a
-# published advisory.  A binary that embeds one of them fails the build.
+# Every entry carries a published advisory. Some are the versions the upstream
+# tool releases pinned, others are intermediate versions that an earlier
+# rebuild shipped; none may be embedded.
 github.com/labstack/echo/v4 4.15.2
 github.com/jackc/pgx/v5 5.7.2
 google.golang.org/grpc 1.82.1
