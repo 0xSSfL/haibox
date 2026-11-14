@@ -67,15 +67,18 @@ Each list is read line by line and split on whitespace, so a module path
 stays paired with its own version. `tests/unit/test_image_module_assertions.py`
 covers the passing case and the failing ones: a deliberately injected
 forbidden module version, a forbidden entry that is not the first one, a
-missing required version, and missing metadata. The Dockerfile runs the same
-script, so the tested behaviour is the shipped behaviour.
+missing required version, missing metadata, and a requirement file that was
+rewritten. The Dockerfile runs the same script, so the tested behaviour is the
+shipped behaviour.
 
 ### Dependency file immutability
 
 The build resolves modules with `-mod=readonly`, which refuses to change the
 requirement files. It also compares `go.mod` and `go.sum` against the
-committed copies after the build and fails if either changed. A pinned
-requirement therefore cannot be silently rewritten by the build.
+committed copies after the build with `check-modules.sh compare`, and fails if
+either changed. A pinned requirement therefore cannot be silently rewritten by
+the build, and the comparison is covered by the same unit tests as the rest
+of the checker.
 
 ## Build and verify
 
@@ -238,23 +241,33 @@ described in [Go tool build inputs](#go-tool-build-inputs).
 | Check | Result |
 |---|---|
 | Build | Passed; `haibox/web-security:0.1.0` |
-| Image ID / manifest-list digest | `sha256:8a4127f3965aceed8ad13e122532a4d47ef491229689da4fcec5897105b28def` |
+| Image ID / manifest-list digest | `sha256:6bb9ed2617f538392d327fafba62f49b4bbc54dbd961bf33c842980acded9314` |
 | Build assertions | Passed; 40 required module versions and 29 forbidden versions, checked by `check-modules.sh` |
 | Dependency file immutability | Passed; the build resolves modules with `-mod=readonly` and compares `go.mod`/`go.sum` against the committed copies after each tool, so no pinned requirement changed |
 | `image verify` | Passed; all 15 pinned tools run successfully in a restricted non-root container |
 | In-image smoke test | Passed; 7 version checks, 6 functional checks against a local target, and 40 module-version read-backs from the shipped binaries |
 | Trivy HIGH/CRITICAL, baseline image | 227 findings: 3 CRITICAL, 224 HIGH |
 | Trivy HIGH/CRITICAL, rebuilt image | 147 findings: 0 CRITICAL, 147 HIGH |
+| Trivy HIGH/CRITICAL, previous remediated build | 147 findings: 0 CRITICAL, 147 HIGH |
 | Grype HIGH/CRITICAL, baseline image | 271 (39 CRITICAL, 232 HIGH) of 675 matches |
 | Grype HIGH/CRITICAL, rebuilt image | 218 (28 CRITICAL, 190 HIGH) of 590 matches |
+| Grype HIGH/CRITICAL, previous remediated build | 218 (28 CRITICAL, 190 HIGH) of 590 matches |
 | Go binaries with a Trivy finding | 7 of 7 before, 0 of 7 after |
 | Grype advisories removed | 46 distinct advisories removed, 0 added |
+| Grype advisories against the previous remediated build | 0 removed, 0 added |
 | `haibox image scan` | Exit 1; 147 HIGH/CRITICAL remain, so the gate stays red |
 
 The comparison is a like-for-like one: the previous image was preserved as
 `haibox/web-security:0.1.0-baseline-p0` (`2543840d4ade`) and both images were
 scanned back to back with the same scanner database, so the difference is the
 image and not the advisory feed.
+
+Two deltas are recorded, because they answer different questions. Against the
+original image the rebuild removes 80 findings. Against the previous remediated
+build — the same seven tools with the same fixed versions, compiled by the
+earlier build recipe — the result is identical: Trivy 147 (0 CRITICAL) in both
+and Grype 590 matches (28 CRITICAL) in both, with 0 advisories removed and 0
+added. The build-mechanism corrections therefore introduce no new finding.
 
 Trivy findings per target:
 
