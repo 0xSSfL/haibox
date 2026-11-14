@@ -77,21 +77,28 @@ def test_script_accepts_metadata_that_matches_the_requirements(tmp_path: Path) -
 def test_script_rejects_a_forbidden_module_version(tmp_path: Path) -> None:
     """The negative regression test for the forbidden-version sweep."""
     _clean_metadata(tmp_path)
+    # The tool keeps every required version and additionally embeds a
+    # vulnerable one, so only the forbidden sweep can fail.
     _write_modinfo(
         tmp_path,
         "dalfox",
-        [("github.com/labstack/echo/v4", "v4.15.2")],
+        [("github.com/labstack/echo/v4", "v4.16.1"), ("github.com/labstack/echo/v4", "v4.15.2")],
     )
     result = _run(tmp_path)
     assert result.returncode != 0
     assert "github.com/labstack/echo/v4" in result.stderr
     assert "4.15.2" in result.stderr
+    assert "does not embed" not in result.stderr
 
 
 def test_script_rejects_a_forbidden_entry_that_is_not_first(tmp_path: Path) -> None:
     """The sweep must pair every module with its own version."""
     _clean_metadata(tmp_path)
-    _write_modinfo(tmp_path, "katana", [("github.com/jackc/pgx/v5", "v5.7.2")])
+    _write_modinfo(
+        tmp_path,
+        "katana",
+        [("github.com/jackc/pgx/v5", "v5.9.0"), ("github.com/jackc/pgx/v5", "v5.7.2")],
+    )
     forbidden = tmp_path / "forbidden.txt"
     forbidden.write_text(
         "\n".join(
@@ -109,6 +116,47 @@ def test_script_rejects_a_forbidden_entry_that_is_not_first(tmp_path: Path) -> N
     assert result.returncode != 0
     assert "github.com/jackc/pgx/v5" in result.stderr
     assert "5.7.2" in result.stderr
+
+
+def _compare(tmp_path: Path, pinned: str, current: str) -> subprocess.CompletedProcess[str]:
+    pinned_file = tmp_path / "go.mod.pinned"
+    pinned_file.write_text(pinned, encoding="utf-8")
+    current_file = tmp_path / "go.mod"
+    current_file.write_text(current, encoding="utf-8")
+    return subprocess.run(
+        ["sh", str(SCRIPT), "compare", str(current_file), str(pinned_file)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_compare_mode_accepts_an_unchanged_file(tmp_path: Path) -> None:
+    result = _compare(tmp_path, "module example.com/x\n", "module example.com/x\n")
+    assert result.returncode == 0
+    assert "unchanged" in result.stdout
+
+
+def test_compare_mode_rejects_a_rewritten_requirement_file(tmp_path: Path) -> None:
+    """A build that rewrites a pinned requirement has to fail."""
+    result = _compare(
+        tmp_path,
+        "module example.com/x\n\nrequire example.com/y v1.0.0\n",
+        "module example.com/x\n\nrequire example.com/y v0.9.0\n",
+    )
+    assert result.returncode != 0
+    assert "modified" in result.stderr
+
+
+def test_compare_mode_rejects_a_missing_file(tmp_path: Path) -> None:
+    result = subprocess.run(
+        ["sh", str(SCRIPT), "compare", str(tmp_path / "missing"), str(tmp_path / "also-missing")],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "cannot compare" in result.stderr
 
 
 def test_script_rejects_a_missing_required_version(tmp_path: Path) -> None:
@@ -163,8 +211,11 @@ def test_dockerfile_builds_with_readonly_modules() -> None:
     dockerfile = DOCKERFILE.read_text(encoding="utf-8")
     assert "-mod=readonly" in dockerfile
     assert "-mod=mod" not in dockerfile
-    assert "cmp -s go.mod" in dockerfile
-    assert "cmp -s go.sum" in dockerfile
+    # The immutability check runs the same tested script the unit tests cover.
+    assert "check-modules.sh compare go.mod" in dockerfile
+    assert "check-modules.sh compare go.sum" in dockerfile
+    assert "cmp -s go.mod" not in dockerfile
+    assert "cmp -s go.sum" not in dockerfile
 
 
 @pytest.mark.parametrize(
