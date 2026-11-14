@@ -1,0 +1,47 @@
+# Required module versions for the Go tools in the web-security image.
+#
+# Format: <tool> <module> <version>
+#
+# Every entry must be present in the module metadata of that tool, or the
+# build fails.  The versions are the ones the committed requirement sets under
+# gomod/ pin, so a build that silently drops an upgrade fails here.
+dalfox github.com/labstack/echo/v4 4.16.1
+katana github.com/jackc/pgx/v5 5.9.0
+nuclei github.com/getkin/kin-openapi 0.149.0
+nuclei github.com/go-git/go-git/v5 5.19.2
+nuclei github.com/go-jose/go-jose/v4 4.1.6
+nuclei google.golang.org/grpc 1.84.0
+nuclei golang.org/x/net 0.62.0
+nuclei golang.org/x/crypto 0.59.0
+nuclei golang.org/x/text 0.44.0
+nuclei golang.org/x/mod 0.42.0
+nuclei golang.org/x/sys 0.50.0
+nuclei github.com/klauspost/compress 1.20.2
+nuclei github.com/andybalholm/brotli 1.2.7
+nuclei github.com/yuin/goldmark 1.7.17
+httpx golang.org/x/net 0.62.0
+httpx golang.org/x/crypto 0.59.0
+httpx golang.org/x/text 0.44.0
+httpx golang.org/x/sys 0.50.0
+httpx github.com/klauspost/compress 1.20.2
+httpx github.com/andybalholm/brotli 1.2.7
+httpx github.com/yuin/goldmark 1.7.17
+subfinder golang.org/x/net 0.62.0
+subfinder golang.org/x/crypto 0.59.0
+subfinder golang.org/x/text 0.44.0
+subfinder golang.org/x/sys 0.50.0
+subfinder github.com/klauspost/compress 1.20.2
+subfinder github.com/andybalholm/brotli 1.2.7
+subfinder github.com/yuin/goldmark 1.7.17
+katana golang.org/x/net 0.62.0
+katana golang.org/x/crypto 0.59.0
+katana golang.org/x/text 0.44.0
+katana golang.org/x/sys 0.50.0
+katana github.com/klauspost/compress 1.20.2
+katana github.com/andybalholm/brotli 1.2.7
+katana github.com/yuin/goldmark 1.7.17
+gobuster golang.org/x/net 0.62.0
+gobuster golang.org/x/crypto 0.59.0
+gobuster golang.org/x/sys 0.50.0
+ffuf golang.org/x/net 0.62.0
+ffuf github.com/andybalholm/brotli 1.2.7

@@ -59,7 +59,7 @@ recorded separately in [`image-validation.md`](image-validation.md).
 |---|---|---|---|---|
 | `core` | Passed 2026-11-09 | Passed: all 18 tools as uid/gid 65534 | 82 (82 H, 0 C) | `sha256:962ce7034da59a7d92c6cb9eca20e2348d73c92c560bc002de094cd77d68c5fc` |
 | `network-security` | Passed 2026-11-09 | Passed: all 12 tools as uid/gid 65534 | 87 (84 H, 3 C) | `sha256:75a634b43746eab3709915113f0be65a5e0149b0c686a5f628eeba0d64effcd3` |
-| `web-security` | Passed 2026-11-08 | Passed: all 15 tools as uid/gid 65534 | 165 (162 H, 3 C) | `sha256:5dfddb51e8dbfb716c8a9d341434f9da9b2c099a4873440d01e39c96f520b9aa` |
+| `web-security` | Passed 2026-11-13 (Go-tool rebuild) | Passed: all 15 tools as uid/gid 65534 | 147 (147 H, 0 C) | `sha256:6bb9ed2617f538392d327fafba62f49b4bbc54dbd961bf33c842980acded9314` |
 | `ad-security` | Passed 2026-11-09 | Passed: Impacket, SMB, LDAP, Kerberos, and nmap as uid/gid 65534 | 98 (94 H, 4 C) | `sha256:8cef90b5d751e0c7eab0bc2aea9be1e7395608420ceb541a6cc37075effaf3d9` |
 | `osint` | Passed 2026-11-09 | Passed: dnsrecon, exiftool, whois, subfinder, httpx, nuclei as uid/gid 65534 | 165 (162 H, 3 C) | `sha256:baf5381595542a24427bf8dc83ae1eb98ccd9a1ed692cc788ecc3ba6c000d3c5` |
 | `full` | Passed 2026-11-09 | Passed: 31 tools as uid/gid 65534 | 181 (174 H, 7 C) | `sha256:bfac7833bd56127b2583e2d7b0a311af07b3974851ab7e693f009259be69dd2b` |
@@ -74,6 +74,12 @@ experimental while its base is a pre-release snapshot. Detailed finding matrices
 reachability analyses are maintained in
 [`docs/vulnerability-risk-register.md`](vulnerability-risk-register.md) and
 [`docs/image-validation.md`](image-validation.md).
+
+The 2026-11-13 Web Security rebuild removed every finding in the seven Go
+binaries, so its row is current. OSINT and Full are built from
+`haibox/web-security:0.1.0` and inherit the rebuilt tools on their next
+build; their recorded rows still carry the Go-module findings of the previous
+base until then.
 
 ## Build and verification
 
@@ -117,8 +123,12 @@ packages.
 - The Debian base is a digest, not a floating tag.
 - Debian packages come from a timestamped snapshot. The snapshot timestamp is a
   manifest build argument and is also recorded in the Dockerfile.
-- Go tools are installed with `go install module@version`; Python tools use
-  `pipx install package==version`; the Nuclei template set is a pinned commit.
+- Go tools are built from the source of their pinned upstream release, with the
+  patched requirement sets in `images/web-security/gomod/`; the build checks the
+  resulting module metadata against `module-requirements.txt` and
+  `forbidden-modules.txt` and fails if a vulnerable version is embedded. Python
+  tools use `pipx install package==version`; the Nuclei template set is a
+  pinned commit.
 - A new upstream release is a reviewed change: update the manifest, rebuild,
   rerun verification, and rescan. Do not use `@latest`.
 - The scan gate is not made green by adding suppressions. An ignore file is

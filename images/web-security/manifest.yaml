@@ -1,6 +1,10 @@
 api_version: haibox/v1
 name: web-security
 version: 0.1.0
+# The tool versions below are the upstream releases. The Go tools are built
+# from the source of those releases with the patched requirement sets in
+# gomod/, and the build checks the resulting module metadata against
+# module-requirements.txt and forbidden-modules.txt.
 status: active
 description: Web application testing image with pinned Go and Python tooling.
 base: debian:13-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2

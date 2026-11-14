@@ -83,6 +83,13 @@ uv run haibox doctor
   the Dockerfile together.
 - Six variants exist: `core`, `network-security`, `web-security`,
   `ad-security`, `osint`, `full`; local tags are `haibox/<name>:0.1.0`.
+- Image versions are independent of the application version. The six catalog
+  images stayed at `0.1.0` across the `0.1.1` and `0.2.0` application
+  releases, so a remediation does not have to move the image version. Bump an
+  image version only in a change that rebuilds the whole catalog, and update
+  every reference to that tag in the same change: the `BASE_IMAGE` build args
+  of the dependent images, the digest table in `docs/image-catalog.md`, and
+  the scan baselines.
 - `uv run haibox image build <name>` builds `depends_on` first. Add
   `--reuse-dependencies` to avoid rebuilding an already-scanned base; rebuilding
   changes the digest and invalidates scan evidence.
@@ -136,3 +143,26 @@ After a feature or fix is complete and `make check` passes:
    - links to the relevant ADR or issue.
 5. Merge/push to `main` only after the checks pass and the description is
    complete. Never merge unverified or failing work.
+
+## Releasing
+
+The `Protect main` ruleset rejects a direct push to `main`, so every change to
+`main` — including a version bump — has to arrive through a pull request.
+Bump the version inside the pull request that ships the change, as `v0.1.1`
+did, instead of opening a separate release pull request.
+
+```bash
+# in the feature branch
+# edit pyproject.toml and src/haibox/version.py to the new version, then
+uv lock                                    # refresh the project entry
+```
+
+After the pull request is merged, tag the merge commit on `main` and push the
+tag. The release workflow checks that the tag matches the project version, runs
+the check gate, builds the wheel and sdist, and publishes the GitHub release.
+
+```bash
+git tag -a vX.Y.Z <merge-commit> -m "HAIBOX X.Y.Z"
+git push origin vX.Y.Z
+```
+
